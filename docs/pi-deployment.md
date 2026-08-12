@@ -187,7 +187,7 @@ Do not continue until all version checks pass.
 From the repository root on Linux, macOS, or WSL:
 
 ```sh
-scripts/deploy-pi.sh piadmin@thinpi-living-room
+sh scripts/deploy-pi.sh piadmin@thinpi-living-room
 ```
 
 The script:
@@ -391,7 +391,7 @@ or the device token to the launcher environment.
 Prefer updating from the separate administrator workstation over SSH:
 
 ```sh
-scripts/deploy-pi.sh piadmin@thinpi-living-room
+sh scripts/deploy-pi.sh piadmin@thinpi-living-room
 ```
 
 On an already provisioned Pi, the script builds both components, replaces the
@@ -423,7 +423,7 @@ controller first when release notes mention an API change.
 Follow logs remotely from the workstation:
 
 ```sh
-scripts/pi-logs.sh piadmin@thinpi-living-room
+sh scripts/pi-logs.sh piadmin@thinpi-living-room
 ```
 
 Temporarily stop the kiosk and return to multi-user mode:

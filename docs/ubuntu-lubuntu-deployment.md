@@ -203,7 +203,7 @@ Create the first real administrator:
 ```sh
 COMPOSE_FILE=deploy/controller/compose.yml \
 COMPOSE_ENV_FILE=deploy/controller/.env \
-  scripts/bootstrap-admin.sh
+  sh scripts/bootstrap-admin.sh
 ```
 
 Open `https://10.10.10.60:8443/` in a browser that trusts

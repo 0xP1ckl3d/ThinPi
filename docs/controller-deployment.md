@@ -288,7 +288,7 @@ no administrator exists and prompts without echoing the password:
 cd /opt/thinpi
 COMPOSE_FILE=deploy/controller/compose.yml \
 COMPOSE_ENV_FILE=deploy/controller/.env \
-  scripts/bootstrap-admin.sh
+  sh scripts/bootstrap-admin.sh
 ```
 
 Use at least eight characters and store the password in your password manager.
