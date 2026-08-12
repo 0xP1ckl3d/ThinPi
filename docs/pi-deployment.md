@@ -272,7 +272,8 @@ It then:
 - installs the locked xterm/OpenSSH client and pinned-host-key enforcement;
 - masks ordinary local getties and blocks kiosk VT escape shortcuts;
 - installs the administrator-only, one-use-ticket maintenance console;
-- restricts Chromium to the controller origin with managed policy;
+- applies managed Chromium policy that disables downloads, developer tools,
+  extensions, guest/incognito mode, sync, and password storage;
 - disables desktop display managers;
 - disables SSH root, forwarding, and X11 access while preserving the existing
   password-authentication setting;

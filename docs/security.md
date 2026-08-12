@@ -36,10 +36,13 @@
 - Client provisioning preserves the host's existing administrator SSH
   password-authentication setting. Root login and forwarding remain disabled;
   key-only SSH is available only through `--disable-ssh-passwords`.
-- The managed native browser runs only after an administrator handoff, in kiosk/app
-  mode with a throwaway profile. Managed policy blocks every origin except the
-  controller and disables developer tools, downloads, guest/incognito, sync,
-  password storage and printing.
+- The managed native browser runs only after an administrator handoff, maximized
+  with a throwaway profile and visible controls so the administrator can close it.
+  Managed policy disables developer tools, downloads, extensions, guest/incognito,
+  sync, password storage, printing, and file-selection dialogs. Browser navigation
+  is not treated as a security boundary: anyone authorized to open this browser is
+  already a ThinPi administrator with access to the separately audited local
+  maintenance path.
   Its **Return to ThinPi** control signs out and closes that browser process.
 - Local maintenance requires a short-lived single-use controller ticket bound
   to the administrator and device. The root agent can only switch to the fixed

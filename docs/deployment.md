@@ -556,7 +556,8 @@ The provisioner will:
 - mask local getty login screens;
 - disable root/forwarding/X11 access to the Pi's SSH server while preserving
   its existing password-authentication setting;
-- restrict the managed admin browser to the controller origin;
+- harden the managed admin browser by disabling downloads, developer tools,
+  extensions, guest/incognito mode, sync, and password storage;
 - configure `piadmin` as the one allowed maintenance console account;
 - set `thinpi.target` as the default boot target.
 
@@ -708,8 +709,9 @@ Test these physically before deployment sign-off:
 - leaving maintenance with `exit` returns to the signed-out launcher;
 - remote SSH exits back to the launcher and cannot open a second/local tab;
 - the SSH remote host-key mismatch fails closed;
-- the managed admin browser cannot browse away from the controller, download files,
-  open developer tools, use guest/incognito mode, or access `file://` paths;
+- the managed admin browser opens only after an administrator handoff, displays
+  normal browser controls so it can be closed, and cannot download files, open
+  developer tools, use guest/incognito mode, or access file-selection dialogs;
 - an expired launcher/controller session returns to login;
 - the `thinpi` account has `nologin`, no sudo membership and no writable system
   paths;

@@ -248,7 +248,8 @@ Before assigning the device to a user, verify:
 - normal users cannot switch virtual terminals or open maintenance;
 - closing RDP, VNC or locked SSH returns to the launcher;
 - remote SSH cannot open a local shell, second tab or forwarding channel;
-- the managed browser cannot leave the controller origin, download files or open developer tools;
+- the managed browser opens only for an authenticated administrator, has visible
+  controls so it can be closed, and cannot download files or open developer tools;
 - only a controller administrator can request the one-use local maintenance console;
 - leaving maintenance with `exit` returns to the signed-out launcher;
 - the hypervisor does not inject shared clipboard, folders or host shortcuts.
