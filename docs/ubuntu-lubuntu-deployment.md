@@ -279,13 +279,15 @@ sudo sh /tmp/thinpi/deploy-client/provision.sh \
   --device-id lubuntu-canary-01 \
   --name 'Lubuntu canary VM' \
   --ca-certificate /tmp/thinpi-ca.crt \
-  --moonlight no
+  --moonlight yes
 ```
 
-Moonlight's upstream APT repository does not currently publish Ubuntu 26.04
-packages, so keep `--moonlight no` on Lubuntu 26.04. RDP, VNC, and locked SSH
-do not require Moonlight. A separately installed native Moonlight executable
-will still be detected by ThinPi. Success ends with:
+Moonlight's APT repository does not publish an Ubuntu 26.04 package. The
+provisioner therefore downloads the official Moonlight 6.1.0 x86-64 AppImage,
+verifies its pinned SHA-256 checksum, extracts it under `/opt/thinpi/moonlight`,
+and installs `/usr/local/bin/moonlight-qt`. It does not install Snap and does
+not require FUSE at runtime. `--moonlight yes` fails provisioning if any of
+those steps fail; it does not silently remove Moonlight. Success ends with:
 
 ```text
 Provisioning complete for generic/amd64 on ubuntu 26.04. Reboot to start the ThinPi kiosk.

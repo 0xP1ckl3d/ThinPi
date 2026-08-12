@@ -203,12 +203,14 @@ FreeRDP, TigerVNC, locked OpenSSH, the non-login `thinpi` identity, the systemd
 kiosk, browser/SSH/Xorg policy, and local maintenance. It enrols the unique
 device, disables SDDM/LightDM/GDM, and changes the default boot target.
 
-Moonlight is installed automatically on supported ARM packages. On generic
-amd64 it remains unavailable unless an administrator has already installed an
-official `moonlight-qt` or `moonlight` executable. Ubuntu 26.04 must use
-`--moonlight no` because upstream does not publish a Resolute APT package;
-other protocols are unaffected. On a supported repository target,
-`--moonlight yes` requires installation and fails closed.
+Moonlight is installed automatically. Supported ARM clients use Moonlight's
+package repository. Generic amd64 clients use the official Moonlight 6.1.0
+x86-64 AppImage, whose URL and SHA-256 checksum are pinned in the provisioner.
+The AppImage is extracted into a root-owned directory under
+`/opt/thinpi/moonlight`, so Ubuntu 26.04 does not need an unavailable Resolute
+APT package, Snap integration, or FUSE at runtime. `--moonlight yes` fails
+closed if installation or verification fails. Use `--moonlight no` only when
+you intentionally do not want Moonlight on that client.
 
 Do not reboot if provisioning reports an error. A successful run ends with:
 

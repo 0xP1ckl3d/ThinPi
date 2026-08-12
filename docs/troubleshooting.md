@@ -284,14 +284,18 @@ compatible and the assigned credential is correct.
 
 ```sh
 command -v moonlight-qt
+moonlight-qt --help
 sudo -u thinpi env HOME=/home/thinpi DISPLAY=:0 \
   XAUTHORITY=/home/thinpi/.Xauthority moonlight-qt pair sunshine-host
 id thinpi
 ```
 
-The pairing must exist for the `thinpi` identity. Use `raspi-config` to select
-the audio output, confirm PulseAudio, and ensure `thinpi` belongs to input,
-audio, video, and render groups.
+On amd64, `command -v` should return `/usr/local/bin/moonlight-qt`; the official
+AppImage is extracted below `/opt/thinpi/moonlight`. On Raspberry Pi, use
+`raspi-config` to select the audio output and confirm PulseAudio. On
+Ubuntu/Lubuntu, confirm PipeWire and `pipewire-pulse` instead. In both cases,
+the pairing must exist for the `thinpi` identity and that user must belong to
+the input, audio, video, and render groups.
 
 ### Target works from controller but not the client
 

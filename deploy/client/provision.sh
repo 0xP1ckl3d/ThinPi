@@ -10,7 +10,7 @@ Options:
   --name NAME                    Display name for this client
   --ca-certificate FILE          Private controller CA certificate
   --platform auto|generic|raspberry-pi
-  --moonlight auto|yes|no        Install supported Moonlight package (default auto)
+  --moonlight auto|yes|no        Install Moonlight (default auto)
   --disable-ssh-passwords        Opt in to key-only administrator SSH
 EOF
 }
@@ -49,12 +49,6 @@ ARCH=$(dpkg --print-architecture)
 case "$ARCH" in amd64|arm64) ;; *) echo "ThinPi supports amd64 and arm64 clients; got $ARCH" >&2; exit 1;; esac
 if [ "$THINPI_OS_FAMILY" = ubuntu ] && [ "$ARCH" != amd64 ]; then
   echo "Ubuntu/Lubuntu ThinPi clients currently require amd64; use Debian 13 for arm64 clients" >&2
-  exit 1
-fi
-if [ "$THINPI_OS_FAMILY" = ubuntu ] && [ "$THINPI_OS_VERSION" = 26.04 ] && \
-   [ "$MOONLIGHT" = yes ] && ! command -v moonlight-qt >/dev/null 2>&1 && ! command -v moonlight >/dev/null 2>&1; then
-  echo "Moonlight's upstream APT repository does not publish Ubuntu 26.04 packages." >&2
-  echo "Rerun with --moonlight no. RDP, VNC and locked SSH remain available." >&2
   exit 1
 fi
 IS_PI=false
@@ -159,8 +153,48 @@ install_moonlight_repo() {
   apt-get install -y moonlight-qt
 }
 
+install_moonlight_appimage_amd64() {
+  # Upstream does not publish an Ubuntu 26.04 APT package. Install its official
+  # x86-64 AppImage as an extracted, root-owned application so the kiosk does
+  # not depend on Snap integration or FUSE at runtime.
+  MOONLIGHT_VERSION=6.1.0
+  MOONLIGHT_ASSET="Moonlight-${MOONLIGHT_VERSION}-x86_64.AppImage"
+  MOONLIGHT_URL="https://github.com/moonlight-stream/moonlight-qt/releases/download/v${MOONLIGHT_VERSION}/${MOONLIGHT_ASSET}"
+  MOONLIGHT_SHA256=0e855ffd22d407e18ab5fdb575fed5f01ca119a3f91993c5f0213f15ac80b400
+  MOONLIGHT_ROOT=/opt/thinpi/moonlight
+  install -d -o root -g root -m 0755 "$MOONLIGHT_ROOT"
+  MOONLIGHT_TEMP=$(mktemp -d "$MOONLIGHT_ROOT/.install.XXXXXX")
+  trap 'rm -rf "$MOONLIGHT_TEMP"' EXIT HUP INT TERM
+
+  echo "Installing official Moonlight ${MOONLIGHT_VERSION} AppImage for amd64..."
+  curl -fL --retry 3 --retry-delay 2 "$MOONLIGHT_URL" -o "$MOONLIGHT_TEMP/$MOONLIGHT_ASSET"
+  printf '%s  %s\n' "$MOONLIGHT_SHA256" "$MOONLIGHT_TEMP/$MOONLIGHT_ASSET" | sha256sum -c -
+  chmod 0755 "$MOONLIGHT_TEMP/$MOONLIGHT_ASSET"
+  (
+    cd "$MOONLIGHT_TEMP"
+    "./$MOONLIGHT_ASSET" --appimage-extract >/dev/null
+  )
+  [ -x "$MOONLIGHT_TEMP/squashfs-root/AppRun" ] || {
+    echo "The verified Moonlight AppImage did not contain an executable AppRun" >&2
+    exit 1
+  }
+
+  MOONLIGHT_INSTALL_DIR="${MOONLIGHT_ROOT}/${MOONLIGHT_VERSION}"
+  install -d -o root -g root -m 0755 "$MOONLIGHT_INSTALL_DIR"
+  cp -a "$MOONLIGHT_TEMP/squashfs-root/." "$MOONLIGHT_INSTALL_DIR/"
+  chown -R root:root "$MOONLIGHT_INSTALL_DIR"
+  chmod -R go-w "$MOONLIGHT_INSTALL_DIR"
+  printf '%s\n' '#!/bin/sh' "exec $MOONLIGHT_INSTALL_DIR/AppRun \"\$@\"" > "$MOONLIGHT_TEMP/moonlight-qt"
+  install -o root -g root -m 0755 "$MOONLIGHT_TEMP/moonlight-qt" /usr/local/bin/moonlight-qt
+
+  rm -rf "$MOONLIGHT_TEMP"
+  trap - EXIT HUP INT TERM
+}
+
 if command -v moonlight-qt >/dev/null 2>&1 || command -v moonlight >/dev/null 2>&1; then
   echo "Moonlight client already installed."
+elif [ "$ARCH" = amd64 ] && { [ "$MOONLIGHT" = auto ] || [ "$MOONLIGHT" = yes ]; }; then
+  install_moonlight_appimage_amd64
 elif [ "$MOONLIGHT" = yes ]; then
   install_moonlight_repo
 elif [ "$MOONLIGHT" = auto ] && { [ "$PLATFORM" = raspberry-pi ] || [ "$ARCH" = arm64 ]; }; then
@@ -169,7 +203,7 @@ elif [ "$MOONLIGHT" = auto ] && { [ "$PLATFORM" = raspberry-pi ] || [ "$ARCH" = 
     exit 1
   fi
 else
-  echo "Moonlight was not installed automatically on generic $ARCH. Other protocols remain available."
+  echo "Moonlight installation was disabled."
 fi
 
 getent group thinpi >/dev/null || groupadd --system thinpi

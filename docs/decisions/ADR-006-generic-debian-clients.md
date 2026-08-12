@@ -24,6 +24,12 @@ guessing at kiosk controls. Ubuntu's Chromium Snap is not used for the locked
 system identity; the provisioner installs native Chrome from Google's signed
 repository and applies the equivalent managed browser policy.
 
+Install Moonlight on generic amd64 clients from upstream's official pinned
+x86-64 AppImage. Verify its pinned SHA-256 digest, extract it into a root-owned
+versioned directory, and expose only the fixed `moonlight-qt` executable. This
+supports Ubuntu 26.04 without relying on an unavailable Resolute APT package,
+Snap integration, or FUSE at runtime.
+
 Produce architecture-labelled, matched agent/launcher Debian packages. The
 updater must reject foreign architectures, unexpected packages and mismatched
 versions.
@@ -36,5 +42,5 @@ versions.
   compatibility command.
 - An amd64 canary does not replace ARM64/Pi hardware acceptance for display,
   decoding, audio, input, boot and thermal behaviour.
-- Moonlight availability remains hardware/package dependent; RDP, VNC and
-  locked SSH do not depend on Moonlight.
+- Moonlight is provisioned on supported amd64 and ARM clients; hardware decode,
+  display, audio, and input still require platform acceptance testing.
