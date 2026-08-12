@@ -126,7 +126,13 @@ func (PlatformRunner) Run(ctx context.Context, c Command) error {
 	}
 	err := cmd.Run()
 	if err != nil && ctx.Err() == nil {
-		return classifyClientFailure(output.String())
+		diagnostic := redactClientOutput(output.String(), c)
+		if strings.TrimSpace(diagnostic) == "" {
+			diagnostic = err.Error()
+		} else {
+			diagnostic = err.Error() + ": " + diagnostic
+		}
+		return classifyClientFailure(diagnostic)
 	}
 	return err
 }
@@ -147,26 +153,56 @@ func (b *boundedOutput) Write(p []byte) (int, error) {
 
 func (b *boundedOutput) String() string { return string(b.data) }
 
+func redactClientOutput(output string, command Command) string {
+	secrets := []string{}
+	for _, line := range strings.Split(command.Stdin, "\n") {
+		if strings.HasPrefix(line, "/p:") && len(line) > 3 {
+			secrets = append(secrets, line[3:])
+		}
+	}
+	if command.Password != "" {
+		secrets = append(secrets, command.Password)
+	}
+	for _, material := range command.Files {
+		if strings.Contains(material.Placeholder, "password") || strings.Contains(material.Placeholder, "identity") {
+			secret := strings.TrimSpace(material.Content)
+			if secret != "" {
+				secrets = append(secrets, secret)
+			}
+		}
+	}
+	for _, secret := range secrets {
+		output = strings.ReplaceAll(output, secret, "[redacted]")
+	}
+	output = strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\t' || r >= 32 && r != 127 {
+			return r
+		}
+		return -1
+	}, output)
+	return strings.TrimSpace(output)
+}
+
 func classifyClientFailure(output string) error {
 	upper := strings.ToUpper(output)
 	switch {
 	case strings.Contains(upper, "FAILED TO OPEN DISPLAY") || strings.Contains(upper, "CANNOT OPEN DISPLAY"):
-		return &ClientRuntimeError{Message: "The remote client could not access the ThinPi display. Restart the ThinPi UI and try again."}
+		return &ClientRuntimeError{Message: "The remote client could not access the ThinPi display. Restart the ThinPi UI and try again.", Diagnostic: output}
 	case strings.Contains(upper, "ERRCONNECT_LOGON_FAILURE") || strings.Contains(upper, "STATUS_LOGON_FAILURE") || strings.Contains(upper, "AUTHENTICATION FAILURE"):
-		return &ClientRuntimeError{Message: "The remote system rejected the assigned username or password."}
+		return &ClientRuntimeError{Message: "The remote system rejected the assigned username or password.", Diagnostic: output}
 	case strings.Contains(upper, "PASSWORD_EXPIRED"):
-		return &ClientRuntimeError{Message: "The assigned remote password has expired."}
+		return &ClientRuntimeError{Message: "The assigned remote password has expired.", Diagnostic: output}
 	case strings.Contains(upper, "ACCOUNT_LOCKED"):
-		return &ClientRuntimeError{Message: "The assigned remote account is locked."}
+		return &ClientRuntimeError{Message: "The assigned remote account is locked.", Diagnostic: output}
 	case strings.Contains(upper, "CERTIFICATE") && (strings.Contains(upper, "MISMATCH") || strings.Contains(upper, "CHANGED")):
-		return &ClientRuntimeError{Message: "The remote system certificate changed. An administrator must verify it before reconnecting."}
+		return &ClientRuntimeError{Message: "The remote system certificate changed. An administrator must verify it before reconnecting.", Diagnostic: output}
 	case strings.Contains(upper, "ERRCONNECT_TLS_CONNECT_FAILED"):
-		return &ClientRuntimeError{Message: "The remote system rejected the secure RDP handshake. Check its TLS and RDP security settings."}
+		return &ClientRuntimeError{Message: "The remote system rejected the secure RDP handshake. Check its TLS and RDP security settings.", Diagnostic: output}
 	case strings.Contains(upper, "ERRCONNECT_CONNECT_TRANSPORT_FAILED") || strings.Contains(upper, "CONNECTION REFUSED") || strings.Contains(upper, "NO ROUTE TO HOST"):
-		return &ClientRuntimeError{Message: "The ThinPi client could not reach the configured remote host and port."}
+		return &ClientRuntimeError{Message: "The ThinPi client could not reach the configured remote host and port.", Diagnostic: output}
 	case strings.Contains(upper, "COMMAND LINE") && (strings.Contains(upper, "ERROR") || strings.Contains(upper, "FAILED")):
-		return &ClientRuntimeError{Message: "The installed remote client rejected this connection configuration."}
+		return &ClientRuntimeError{Message: "The installed remote client rejected this connection configuration.", Diagnostic: output}
 	default:
-		return &ClientRuntimeError{Message: "The remote client exited unexpectedly. An administrator can inspect: journalctl -b -u thinpi-agent"}
+		return &ClientRuntimeError{Message: "The remote client exited unexpectedly. An administrator can inspect: journalctl -b -u thinpi-agent -o cat --no-pager", Diagnostic: output}
 	}
 }

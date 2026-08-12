@@ -76,7 +76,10 @@ type Runner interface {
 	Run(context.Context, Command) error
 }
 
-type ClientRuntimeError struct{ Message string }
+type ClientRuntimeError struct {
+	Message    string
+	Diagnostic string
+}
 
 func (e *ClientRuntimeError) Error() string { return e.Message }
 
@@ -201,6 +204,7 @@ func (m *Manager) run(ctx context.Context, id, ticket string) {
 		var runtimeError *ClientRuntimeError
 		if errors.As(err, &runtimeError) {
 			failure = errors.New(runtimeError.Message)
+			m.log.Warn("native client diagnostic", "connection_id", manifest.ConnectionID, "diagnostic", runtimeError.Diagnostic)
 		}
 		m.log.Warn("native client failure", "connection_id", manifest.ConnectionID, "detail", failure.Error())
 		m.set(Failed, nil, failure)
