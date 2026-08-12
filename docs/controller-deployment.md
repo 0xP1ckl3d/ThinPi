@@ -114,7 +114,8 @@ Create the destination first:
 
 ```sh
 cd /opt/thinpi
-install -d -m 0750 deploy/controller/tls
+sudo install -d -o root -g root -m 0750 deploy/controller/tls
+sudo chown root:65532 deploy/controller/tls
 ```
 
 ### Option A: certificate from an existing/public CA
@@ -122,10 +123,12 @@ install -d -m 0750 deploy/controller/tls
 Install the full certificate chain and unencrypted server key:
 
 ```sh
-sudo install -o root -g 65532 -m 0640 /secure/source/fullchain.pem \
+sudo install -o root -g root -m 0640 /secure/source/fullchain.pem \
   deploy/controller/tls/tls.crt
-sudo install -o root -g 65532 -m 0640 /secure/source/server.key \
+sudo chown root:65532 deploy/controller/tls/tls.crt
+sudo install -o root -g root -m 0640 /secure/source/server.key \
   deploy/controller/tls/tls.key
+sudo chown root:65532 deploy/controller/tls/tls.key
 ```
 
 ### Option B: private home CA
@@ -149,8 +152,8 @@ sh scripts/generate-controller-pki.sh \
 
 The helper refuses to overwrite an existing CA, verifies the issued
 certificate, and prints its SAN. Protect `$HOME/thinpi-pki/thinpi-ca.key`
-offline; that key can issue trusted certificates and must never be copied to
-the controller or Pi.
+offline when practical; that key can issue trusted certificates and must never
+be copied to a client appliance.
 
 Copy only these files to the controller:
 
@@ -170,10 +173,12 @@ scp "$HOME/thinpi-pki/tls.crt" "$HOME/thinpi-pki/tls.key" \
 On the controller host, install the server pair and remove the transfer copy:
 
 ```sh
-sudo install -o root -g 65532 -m 0640 /tmp/tls.crt \
+sudo install -o root -g root -m 0640 /tmp/tls.crt \
   deploy/controller/tls/tls.crt
-sudo install -o root -g 65532 -m 0640 /tmp/tls.key \
+sudo chown root:65532 deploy/controller/tls/tls.crt
+sudo install -o root -g root -m 0640 /tmp/tls.key \
   deploy/controller/tls/tls.key
+sudo chown root:65532 deploy/controller/tls/tls.key
 sudo rm -f /tmp/tls.crt /tmp/tls.key
 ```
 
@@ -195,9 +200,9 @@ unrecoverable even if the database survives.
 
 ```sh
 cd /opt/thinpi
-install -d -m 0750 deploy/controller/secrets
-umask 0077
-openssl rand -base64 32 > deploy/controller/secrets/thinpi_master_key
+sudo install -d -o root -g root -m 0750 deploy/controller/secrets
+sudo chown root:65532 deploy/controller/secrets
+sudo sh -c 'umask 0077; openssl rand -base64 32 > deploy/controller/secrets/thinpi_master_key'
 sudo chown root:65532 deploy/controller/secrets/thinpi_master_key
 sudo chmod 0640 deploy/controller/secrets/thinpi_master_key
 ```

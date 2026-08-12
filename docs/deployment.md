@@ -233,11 +233,14 @@ On the controller:
 
 ```sh
 cd /opt/thinpi
-sudo install -d -o root -g 65532 -m 0750 deploy/controller/tls
-sudo install -o root -g 65532 -m 0640 /tmp/tls.crt \
+sudo install -d -o root -g root -m 0750 deploy/controller/tls
+sudo chown root:65532 deploy/controller/tls
+sudo install -o root -g root -m 0640 /tmp/tls.crt \
   deploy/controller/tls/tls.crt
-sudo install -o root -g 65532 -m 0640 /tmp/tls.key \
+sudo chown root:65532 deploy/controller/tls/tls.crt
+sudo install -o root -g root -m 0640 /tmp/tls.key \
   deploy/controller/tls/tls.key
+sudo chown root:65532 deploy/controller/tls/tls.key
 sudo rm -f /tmp/tls.crt /tmp/tls.key
 ```
 
@@ -250,11 +253,11 @@ Run on the controller:
 
 ```sh
 cd /opt/thinpi
-sudo install -d -o root -g root -m 0700 deploy/controller/secrets
-openssl rand -base64 32 | sudo tee \
-  deploy/controller/secrets/thinpi_master_key >/dev/null
-sudo chown root:root deploy/controller/secrets/thinpi_master_key
-sudo chmod 0600 deploy/controller/secrets/thinpi_master_key
+sudo install -d -o root -g root -m 0750 deploy/controller/secrets
+sudo chown root:65532 deploy/controller/secrets
+sudo sh -c 'umask 0077; openssl rand -base64 32 > deploy/controller/secrets/thinpi_master_key'
+sudo chown root:65532 deploy/controller/secrets/thinpi_master_key
+sudo chmod 0640 deploy/controller/secrets/thinpi_master_key
 cp deploy/controller/.env.example deploy/controller/.env
 nano deploy/controller/.env
 ```

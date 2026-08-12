@@ -100,13 +100,16 @@ certificates; it is not mounted into the running controller container.
 cd /opt/thinpi
 sh scripts/generate-controller-pki.sh \
   thinpi-controller 10.10.10.60 "$HOME/thinpi-pki-production"
-sudo install -d -o root -g 65532 -m 0750 deploy/controller/tls
-sudo install -o root -g 65532 -m 0640 \
+sudo install -d -o root -g root -m 0750 deploy/controller/tls
+sudo chown root:65532 deploy/controller/tls
+sudo install -o root -g root -m 0640 \
   "$HOME/thinpi-pki-production/tls.crt" \
   deploy/controller/tls/tls.crt
-sudo install -o root -g 65532 -m 0640 \
+sudo chown root:65532 deploy/controller/tls/tls.crt
+sudo install -o root -g root -m 0640 \
   "$HOME/thinpi-pki-production/tls.key" \
   deploy/controller/tls/tls.key
+sudo chown root:65532 deploy/controller/tls/tls.key
 openssl x509 -in deploy/controller/tls/tls.crt -noout \
   -subject -issuer -dates -ext subjectAltName
 ```
@@ -147,7 +150,8 @@ Create the credential encryption key and production environment file:
 
 ```sh
 cd /opt/thinpi
-sudo install -d -o root -g 65532 -m 0750 deploy/controller/secrets
+sudo install -d -o root -g root -m 0750 deploy/controller/secrets
+sudo chown root:65532 deploy/controller/secrets
 sudo sh -c 'umask 0077; openssl rand -base64 32 > deploy/controller/secrets/thinpi_master_key'
 sudo chown root:65532 deploy/controller/secrets/thinpi_master_key
 sudo chmod 0640 deploy/controller/secrets/thinpi_master_key
