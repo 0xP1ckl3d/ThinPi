@@ -11,14 +11,13 @@ case "$CONTROLLER_URL" in
   *[[:space:]]*) echo "Controller URL must not contain whitespace" >&2; exit 2 ;;
 esac
 
-# Path-specific allow rules are deliberately more specific than the global
-# block rule. Chrome treats paths as prefixes; trailing URL wildcards are not a
-# valid policy format. These paths cover the one-time handoff, admin UI/assets,
-# and its API without allowing unrelated browsing.
+# Allow the configured controller origin and nothing else.  Using the origin
+# (no path component) covers the handoff redirect, admin pages, static assets
+# and API calls without relying on a fragile list of individual URL prefixes.
 POLICY_FILE=$(mktemp)
 trap 'rm -f "$POLICY_FILE"' EXIT HUP INT TERM
-jq -n --arg admin "$CONTROLLER_URL/admin" --arg api "$CONTROLLER_URL/api/v1" --arg static "$CONTROLLER_URL/static" \
-  '{URLBlocklist:["*"],URLAllowlist:[$admin,$api,$static],AllowDinosaurEasterEgg:false,AllowFileSelectionDialogs:false,BookmarkBarEnabled:false,BrowserAddPersonEnabled:false,BrowserGuestModeEnabled:false,BrowserSignin:0,DefaultBrowserSettingEnabled:false,DefaultPopupsSetting:2,DeveloperToolsAvailability:2,DownloadRestrictions:3,EditBookmarksEnabled:false,ExtensionInstallBlocklist:["*"],ExternalProtocolDialogShowAlwaysOpenCheckbox:false,IncognitoModeAvailability:1,PasswordManagerEnabled:false,PrintingEnabled:false,SavingBrowserHistoryDisabled:true,SyncDisabled:true}' > "$POLICY_FILE"
+jq -n --arg controller "$CONTROLLER_URL" \
+  '{URLBlocklist:["*"],URLAllowlist:[$controller],AllowDinosaurEasterEgg:false,AllowFileSelectionDialogs:false,BookmarkBarEnabled:false,BrowserAddPersonEnabled:false,BrowserGuestModeEnabled:false,BrowserSignin:0,DefaultBrowserSettingEnabled:false,DefaultPopupsSetting:2,DeveloperToolsAvailability:2,DownloadRestrictions:3,EditBookmarksEnabled:false,ExtensionInstallBlocklist:["*"],ExternalProtocolDialogShowAlwaysOpenCheckbox:false,IncognitoModeAvailability:1,PasswordManagerEnabled:false,PrintingEnabled:false,SavingBrowserHistoryDisabled:true,SyncDisabled:true}' > "$POLICY_FILE"
 
 install -d -o root -g root -m 0755 \
   /etc/chromium/policies/managed /etc/opt/chrome/policies/managed

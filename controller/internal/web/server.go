@@ -262,7 +262,9 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		s.error(w, r, 401, "INVALID_CREDENTIALS", "The username or password was incorrect.")
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: "thinpi_session", Value: token, Path: "/", HttpOnly: true, Secure: !s.Dev, SameSite: http.SameSiteStrictMode, MaxAge: int(s.Store.UserIdleTimeout(r.Context(), u.ID).Seconds())})
+	// The database expiry is sliding and authoritative. A session cookie avoids
+	// imposing a second, fixed browser-side deadline while the user is active.
+	http.SetCookie(w, &http.Cookie{Name: "thinpi_session", Value: token, Path: "/", HttpOnly: true, Secure: !s.Dev, SameSite: http.SameSiteStrictMode})
 	writeJSON(w, 200, map[string]any{"token": token, "csrf_token": csrf, "user": u})
 }
 func (s *Server) loginUsers(w http.ResponseWriter, r *http.Request) {
@@ -325,7 +327,7 @@ func (s *Server) redeemAdminHandoff(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: "thinpi_session", Value: token, Path: "/", HttpOnly: true, Secure: !s.Dev, SameSite: http.SameSiteStrictMode, MaxAge: int((24 * time.Hour).Seconds())})
+	http.SetCookie(w, &http.Cookie{Name: "thinpi_session", Value: token, Path: "/", HttpOnly: true, Secure: !s.Dev, SameSite: http.SameSiteStrictMode})
 	http.Redirect(w, r, "/admin", http.StatusSeeOther)
 }
 func (s *Server) connections(w http.ResponseWriter, r *http.Request) {
@@ -485,7 +487,7 @@ func (s *Server) adminLogin(w http.ResponseWriter, r *http.Request) {
 		_ = loginTemplate.Execute(w, "The username or password was incorrect.")
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: "thinpi_session", Value: token, Path: "/", HttpOnly: true, Secure: !s.Dev, SameSite: http.SameSiteStrictMode, MaxAge: int(s.Store.UserIdleTimeout(r.Context(), u.ID).Seconds())})
+	http.SetCookie(w, &http.Cookie{Name: "thinpi_session", Value: token, Path: "/", HttpOnly: true, Secure: !s.Dev, SameSite: http.SameSiteStrictMode})
 	http.Redirect(w, r, "/admin", 303)
 }
 

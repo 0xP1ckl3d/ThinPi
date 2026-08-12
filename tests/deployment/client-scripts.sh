@@ -28,7 +28,7 @@ grep -F 'google-chrome-stable' "$ROOT/deploy/client/provision.sh" >/dev/null
 grep -F 'THINPI_ADMIN_BROWSER' "$ROOT/deploy/client/provision.sh" >/dev/null
 grep -F 'thinpi-browser-policy' "$ROOT/deploy/client/provision.sh" >/dev/null
 grep -F 'URLBlocklist:["*"]' "$ROOT/deploy/client/browser-policy.sh" >/dev/null
-grep -F 'URLAllowlist:[$admin,$api,$static]' "$ROOT/deploy/client/browser-policy.sh" >/dev/null
+grep -F 'URLAllowlist:[$controller]' "$ROOT/deploy/client/browser-policy.sh" >/dev/null
 ! grep -F '/*' "$ROOT/deploy/client/browser-policy.sh" >/dev/null
 grep -F 'xhost +SI:localuser:thinpi' "$ROOT/deploy/client/xinitrc" >/dev/null
 grep -F 'TTYPath=/dev/tty2' "$ROOT/deploy/client/thinpi-maintenance@.service" >/dev/null

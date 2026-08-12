@@ -3,6 +3,10 @@ const $ = selector => document.querySelector(selector);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
 const state = {dashboard:{},users:[],groups:[],connections:[],credentials:[],devices:[],policies:[],permissions:[],audit:[]};
 let toastTimer;
+let lastActivity = Date.now();
+for (const eventName of ['pointerdown','keydown','touchstart','scroll']) {
+  window.addEventListener(eventName, () => { lastActivity = Date.now(); }, {passive:true});
+}
 
 async function api(path, options = {}) {
   options.headers = {...(options.headers || {}), 'Content-Type':'application/json', 'X-CSRF-Token':csrf};
@@ -260,4 +264,8 @@ document.querySelectorAll('input[type=password]').forEach(addPasswordToggle);
 syncConnectionFields();
 syncCredentialFields();
 refresh();
-setInterval(refresh,30000);
+// Refresh only while the administrator has been active recently. Each API
+// request slides the server session; an abandoned browser therefore expires.
+setInterval(() => {
+  if (!document.hidden && Date.now() - lastActivity < 90000) refresh();
+},30000);
