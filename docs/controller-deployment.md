@@ -188,9 +188,9 @@ provisioning step. Never copy the CA private key to a Pi.
 Validate the installed certificate before starting:
 
 ```sh
-openssl x509 -in deploy/controller/tls/tls.crt -noout \
+sudo openssl x509 -in deploy/controller/tls/tls.crt -noout \
   -subject -issuer -dates -ext subjectAltName
-openssl pkey -in deploy/controller/tls/tls.key -check -noout
+sudo openssl pkey -in deploy/controller/tls/tls.key -check -noout
 ```
 
 ## 5. Create the credential-encryption master key

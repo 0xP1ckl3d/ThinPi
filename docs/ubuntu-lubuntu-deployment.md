@@ -110,7 +110,7 @@ sudo install -o root -g root -m 0640 \
   "$HOME/thinpi-pki-production/tls.key" \
   deploy/controller/tls/tls.key
 sudo chown root:65532 deploy/controller/tls/tls.key
-openssl x509 -in deploy/controller/tls/tls.crt -noout \
+sudo openssl x509 -in deploy/controller/tls/tls.crt -noout \
   -subject -issuer -dates -ext subjectAltName
 ```
 
@@ -176,9 +176,14 @@ Wait for `controller` to show `healthy`, then test using the private CA:
 
 ```sh
 curl --fail --show-error \
-  --cacert deploy/controller/tls/tls.crt \
+  --cacert "$HOME/thinpi-pki-production/thinpi-ca.crt" \
   https://10.10.10.60:8443/healthz
 ```
+
+Do not point ordinary `curl` at `deploy/controller/tls/tls.crt`. That directory
+is intentionally readable only by root and the controller container's numeric
+GID, so the shell user cannot traverse it. The public CA file under `$HOME` is
+the correct readable trust file for this health check.
 
 If UFW is active, permit SSH and TCP 8443 only from the local client/admin
 network. This example assumes the two VMs are on `10.10.10.0/24`; change the

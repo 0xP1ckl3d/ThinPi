@@ -116,8 +116,8 @@ Common causes:
 Validate material:
 
 ```sh
-openssl pkey -in deploy/controller/tls/tls.key -check -noout
-openssl x509 -in deploy/controller/tls/tls.crt -noout -subject -dates
+sudo openssl pkey -in deploy/controller/tls/tls.key -check -noout
+sudo openssl x509 -in deploy/controller/tls/tls.crt -noout -subject -dates
 ss -lntp | grep 8443
 ```
 
