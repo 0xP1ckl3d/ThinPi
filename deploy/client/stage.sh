@@ -20,14 +20,14 @@ sudo install -m 0755 /tmp/thinpi-agent /usr/local/bin/thinpi-agent
 sudo install -m 0755 /tmp/thinpi/launcher-build/thinpi-launcher /usr/local/bin/thinpi-launcher
 
 if systemctl list-unit-files thinpi-agent.service --no-legend 2>/dev/null | grep -q thinpi-agent; then
-  [ -x /usr/lib/xorg/Xorg.wrap ] || {
-    echo "The installed client is missing /usr/lib/xorg/Xorg.wrap; rerun provisioning to install xserver-xorg-legacy" >&2
-    exit 1
-  }
   sudo install -m 0755 /tmp/thinpi-agent /usr/bin/thinpi-agent
   sudo install -m 0755 /tmp/thinpi/launcher-build/thinpi-launcher /usr/bin/thinpi-launcher
   sudo install -m 0644 /tmp/thinpi/deploy-client/thinpi-agent.service /etc/systemd/system/thinpi-agent.service
-  sudo install -m 0644 /tmp/thinpi/deploy-client/thinpi-ui.service /etc/systemd/system/thinpi-ui.service
+  if [ "$PLATFORM" = raspberry-pi ]; then
+    sudo install -m 0644 /tmp/thinpi/deploy-client/thinpi-ui-pi.service /etc/systemd/system/thinpi-ui.service
+  else
+    sudo install -m 0644 /tmp/thinpi/deploy-client/thinpi-ui.service /etc/systemd/system/thinpi-ui.service
+  fi
   sudo install -m 0644 /tmp/thinpi/deploy-client/thinpi-maintenance@.service /etc/systemd/system/thinpi-maintenance@.service
   sudo install -m 0644 /tmp/thinpi/deploy-client/thinpi.target /etc/systemd/system/thinpi.target
   sudo install -d -o root -g root -m 0755 /usr/local/libexec /etc/X11/xorg.conf.d /etc/ssh/sshd_config.d
@@ -38,11 +38,16 @@ if systemctl list-unit-files thinpi-agent.service --no-legend 2>/dev/null | grep
   sudo install -m 0644 /tmp/thinpi/deploy-client/hardening/10-thinpi-kiosk.conf /etc/X11/xorg.conf.d/10-thinpi-kiosk.conf
   sudo install -m 0644 /tmp/thinpi/deploy-client/hardening/99-thinpi-ssh.conf /etc/ssh/sshd_config.d/99-thinpi.conf
   if [ "$PLATFORM" = raspberry-pi ]; then
+    [ -x /usr/lib/xorg/Xorg.wrap ] || {
+      echo "The installed client is missing /usr/lib/xorg/Xorg.wrap; rerun provisioning to install xserver-xorg-legacy" >&2
+      exit 1
+    }
     sudo sed -i 's/^needs_root_rights=auto$/needs_root_rights=yes/' /etc/X11/Xwrapper.config
-    sudo install -m 0755 /tmp/thinpi/deploy-client/configure-pi-xorg.sh /usr/local/libexec/thinpi-configure-pi-xorg
-    sudo install -d -o root -g root -m 0755 /etc/systemd/system/thinpi-ui.service.d
-    sudo install -m 0644 /tmp/thinpi/deploy-client/thinpi-ui-pi.conf /etc/systemd/system/thinpi-ui.service.d/raspberry-pi.conf
-    sudo /usr/local/libexec/thinpi-configure-pi-xorg
+    sudo install -m 0755 /tmp/thinpi/deploy-client/detect-pi-display.sh /usr/local/libexec/thinpi-detect-display
+    sudo rm -f /usr/local/libexec/thinpi-configure-pi-xorg
+    sudo rm -f /etc/systemd/system/thinpi-ui.service.d/raspberry-pi.conf
+    sudo rmdir /etc/systemd/system/thinpi-ui.service.d 2>/dev/null || true
+    sudo /usr/local/libexec/thinpi-detect-display
   fi
   sudo systemctl daemon-reload
   sudo systemctl set-default thinpi.target
@@ -59,6 +64,25 @@ if systemctl list-unit-files thinpi-agent.service --no-legend 2>/dev/null | grep
   sudo pkill -u thinpi -x chrome 2>/dev/null || true
   sudo pkill -u thinpi -x chromium 2>/dev/null || true
   sudo systemctl restart thinpi-agent thinpi-ui
+  sleep 8
+  UI_STATE_FIRST=$(sudo systemctl show thinpi-ui -p ActiveState -p SubState -p NRestarts -p MainPID -p ExecMainStatus)
+  UI_RESTARTS_FIRST=$(printf '%s\n' "$UI_STATE_FIRST" | sed -n 's/^NRestarts=//p')
+  sleep 3
+  UI_STATE_SECOND=$(sudo systemctl show thinpi-ui -p ActiveState -p SubState -p NRestarts -p MainPID -p ExecMainStatus)
+  UI_ACTIVE=$(printf '%s\n' "$UI_STATE_SECOND" | sed -n 's/^ActiveState=//p')
+  UI_SUBSTATE=$(printf '%s\n' "$UI_STATE_SECOND" | sed -n 's/^SubState=//p')
+  UI_RESTARTS_SECOND=$(printf '%s\n' "$UI_STATE_SECOND" | sed -n 's/^NRestarts=//p')
+  UI_MAIN_PID=$(printf '%s\n' "$UI_STATE_SECOND" | sed -n 's/^MainPID=//p')
+  UI_EXIT_STATUS=$(printf '%s\n' "$UI_STATE_SECOND" | sed -n 's/^ExecMainStatus=//p')
+  case "$UI_MAIN_PID" in ''|0|*[!0-9]*) UI_PID_VALID=false;; *) UI_PID_VALID=true;; esac
+  if [ "$UI_ACTIVE" != active ] || [ "$UI_SUBSTATE" != running ] || \
+     [ "$UI_PID_VALID" != true ] || [ "$UI_EXIT_STATUS" != 0 ] || \
+     [ "$UI_RESTARTS_FIRST" != "$UI_RESTARTS_SECOND" ]; then
+    echo "thinpi-ui did not remain stable after the update" >&2
+    printf '%s\n' "$UI_STATE_FIRST" "$UI_STATE_SECOND" >&2
+    sudo systemctl --no-pager --full status thinpi-ui || true
+    exit 1
+  fi
   sudo systemctl --no-pager --full status thinpi-agent thinpi-ui
 else
   echo "Binaries staged in /usr/local/bin. Run /tmp/thinpi/deploy-client/provision.sh next."

@@ -15,7 +15,7 @@ $ROOT/deploy/client/stage.sh
 $ROOT/deploy/client/update.sh
 $ROOT/deploy/client/maintenance-session.sh
 $ROOT/deploy/client/xinitrc
-$ROOT/deploy/client/configure-pi-xorg.sh
+$ROOT/deploy/client/detect-pi-display.sh
 $ROOT/deploy/pi/provision.sh
 $ROOT/deploy/pi/update.sh
 "
@@ -59,20 +59,26 @@ grep -F 'qt6-svg-plugins' "$ROOT/deploy/client/provision.sh" >/dev/null
 grep -F 'needs_root_rights=auto' "$ROOT/deploy/client/hardening/Xwrapper.config" >/dev/null
 grep -F "s/^needs_root_rights=auto\$/needs_root_rights=yes/" "$ROOT/deploy/client/provision.sh" >/dev/null
 grep -F "s/^needs_root_rights=auto\$/needs_root_rights=yes/" "$ROOT/deploy/client/stage.sh" >/dev/null
-grep -F '/usr/lib/xorg/Xorg.wrap :0' "$ROOT/deploy/client/thinpi-ui.service" >/dev/null
+grep -F '/usr/bin/xinit /usr/local/libexec/thinpi-xinitrc -- :0' "$ROOT/deploy/client/thinpi-ui.service" >/dev/null
+grep -F 'ExecStartPre=/usr/local/libexec/thinpi-detect-display' "$ROOT/deploy/client/thinpi-ui-pi.service" >/dev/null
+grep -F 'ExecStart=/usr/sbin/runuser -u thinpi -- /usr/bin/xinit' "$ROOT/deploy/client/thinpi-ui-pi.service" >/dev/null
+grep -F 'ExecStartPost=/usr/bin/chvt 7' "$ROOT/deploy/client/thinpi-ui-pi.service" >/dev/null
+! grep -F 'NoNewPrivileges=' "$ROOT/deploy/client/thinpi-ui-pi.service" >/dev/null
+! grep -F 'PAMName=' "$ROOT/deploy/client/thinpi-ui-pi.service" >/dev/null
 grep -F '[ -x /usr/lib/xorg/Xorg.wrap ]' "$ROOT/deploy/client/provision.sh" >/dev/null
 grep -F '[ -x /usr/lib/xorg/Xorg.wrap ]' "$ROOT/deploy/client/stage.sh" >/dev/null
-grep -F 'by-path/*-card' "$ROOT/deploy/client/configure-pi-xorg.sh" >/dev/null
-if grep -E '/dev/dri/card[01]([^0-9]|$)' "$ROOT/deploy/client/configure-pi-xorg.sh" >/dev/null; then
-  echo "The Pi Xorg helper must not persist a probe-order-dependent DRM card" >&2
+if grep -E '/dev/dri/card[01]([^0-9]|$)' "$ROOT/deploy/client/detect-pi-display.sh" >/dev/null; then
+  echo "The Pi display detector must not hard-code a probe-order-dependent DRM card" >&2
   exit 1
 fi
-grep -F 'thinpi-configure-pi-xorg' "$ROOT/deploy/client/provision.sh" >/dev/null
-grep -F 'sudo /usr/local/libexec/thinpi-configure-pi-xorg' "$ROOT/deploy/client/stage.sh" >/dev/null
+grep -F 'thinpi-detect-display' "$ROOT/deploy/client/provision.sh" >/dev/null
+grep -F 'sudo /usr/local/libexec/thinpi-detect-display' "$ROOT/deploy/client/stage.sh" >/dev/null
+grep -F '99-vc4.conf' "$ROOT/deploy/client/detect-pi-display.sh" >/dev/null
 grep -F 'NoNewPrivileges=true' "$ROOT/deploy/client/thinpi-ui.service" >/dev/null
-grep -F 'NoNewPrivileges=false' "$ROOT/deploy/client/thinpi-ui-pi.conf" >/dev/null
-grep -F 'thinpi-ui-pi.conf' "$ROOT/deploy/client/provision.sh" >/dev/null
-grep -F 'thinpi-ui-pi.conf' "$ROOT/deploy/client/stage.sh" >/dev/null
+grep -F 'thinpi-ui-pi.service' "$ROOT/deploy/client/provision.sh" >/dev/null
+grep -F 'thinpi-ui-pi.service' "$ROOT/deploy/client/stage.sh" >/dev/null
+grep -F 'UI_RESTARTS_FIRST' "$ROOT/deploy/client/stage.sh" >/dev/null
+grep -F 'UI_RESTARTS_SECOND' "$ROOT/deploy/client/stage.sh" >/dev/null
 grep -F './scripts/deploy-pi.sh pickle@localhost' "$ROOT/docs/pi-deployment.md" >/dev/null
 grep -F -- '--platform raspberry-pi' "$ROOT/scripts/deploy-pi.sh" >/dev/null
 grep -F 'deploy/client/provision.sh' "$ROOT/deploy/pi/provision.sh" >/dev/null
@@ -100,29 +106,31 @@ if THINPI_OS_RELEASE_FILE="$FIXTURE_DIR/unsupported" sh -c '. "$1"; thinpi_load_
 fi
 
 mkdir -p "$FIXTURE_DIR/sys/class/drm/card0-HDMI-A-1" \
-  "$FIXTURE_DIR/sys/class/drm/card1-HDMI-A-1" "$FIXTURE_DIR/dev/dri/by-path" \
+  "$FIXTURE_DIR/sys/class/drm/card1-HDMI-A-1" "$FIXTURE_DIR/dev/dri" \
   "$FIXTURE_DIR/etc/X11/xorg.conf.d"
 printf '%s\n' disconnected > "$FIXTURE_DIR/sys/class/drm/card0-HDMI-A-1/status"
 printf '%s\n' connected > "$FIXTURE_DIR/sys/class/drm/card1-HDMI-A-1/status"
 : > "$FIXTURE_DIR/dev/dri/card0"
 : > "$FIXTURE_DIR/dev/dri/card1"
-ln -s ../card0 "$FIXTURE_DIR/dev/dri/by-path/platform-vc4-secondary-card"
-ln -s ../card1 "$FIXTURE_DIR/dev/dri/by-path/platform-vc4-display-card"
-if [ -L "$FIXTURE_DIR/dev/dri/by-path/platform-vc4-display-card" ]; then
-  THINPI_DRM_SYSFS_ROOT="$FIXTURE_DIR/sys/class/drm" \
-  THINPI_DRI_ROOT="$FIXTURE_DIR/dev/dri" \
-  THINPI_XORG_CONFIG="$FIXTURE_DIR/etc/X11/xorg.conf.d/99-thinpi-vc4.conf" \
-    sh "$ROOT/deploy/client/configure-pi-xorg.sh"
-  grep -F "Option \"kmsdev\" \"$FIXTURE_DIR/dev/dri/by-path/platform-vc4-display-card\"" \
-    "$FIXTURE_DIR/etc/X11/xorg.conf.d/99-thinpi-vc4.conf" >/dev/null
+: > "$FIXTURE_DIR/etc/X11/xorg.conf.d/99-vc4.conf"
+PI_DISPLAY_SHELL=bash
+if sh -c 'set -o pipefail' >/dev/null 2>&1; then PI_DISPLAY_SHELL=sh; fi
+THINPI_DRM_SYSFS_ROOT="$FIXTURE_DIR/sys/class/drm" \
+THINPI_DRI_ROOT="$FIXTURE_DIR/dev/dri" \
+THINPI_XORG_CONFIG="$FIXTURE_DIR/etc/X11/xorg.conf.d/99-thinpi-vc4.conf" \
+THINPI_DISPLAY_WAIT_ATTEMPTS=1 THINPI_DISPLAY_WAIT_DELAY=0 \
+  "$PI_DISPLAY_SHELL" "$ROOT/deploy/client/detect-pi-display.sh"
+grep -F "Option \"kmsdev\" \"$FIXTURE_DIR/dev/dri/card1\"" \
+  "$FIXTURE_DIR/etc/X11/xorg.conf.d/99-thinpi-vc4.conf" >/dev/null
+[ ! -e "$FIXTURE_DIR/etc/X11/xorg.conf.d/99-vc4.conf" ]
 
-  printf '%s\n' disconnected > "$FIXTURE_DIR/sys/class/drm/card1-HDMI-A-1/status"
-  THINPI_DRM_SYSFS_ROOT="$FIXTURE_DIR/sys/class/drm" \
-  THINPI_DRI_ROOT="$FIXTURE_DIR/dev/dri" \
-  THINPI_XORG_CONFIG="$FIXTURE_DIR/etc/X11/xorg.conf.d/99-thinpi-vc4.conf" \
-    sh "$ROOT/deploy/client/configure-pi-xorg.sh"
-  grep -F "Option \"kmsdev\" \"$FIXTURE_DIR/dev/dri/by-path/platform-vc4-secondary-card\"" \
-    "$FIXTURE_DIR/etc/X11/xorg.conf.d/99-thinpi-vc4.conf" >/dev/null
-fi
+printf '%s\n' disconnected > "$FIXTURE_DIR/sys/class/drm/card1-HDMI-A-1/status"
+THINPI_DRM_SYSFS_ROOT="$FIXTURE_DIR/sys/class/drm" \
+THINPI_DRI_ROOT="$FIXTURE_DIR/dev/dri" \
+THINPI_XORG_CONFIG="$FIXTURE_DIR/etc/X11/xorg.conf.d/99-thinpi-vc4.conf" \
+THINPI_DISPLAY_WAIT_ATTEMPTS=1 THINPI_DISPLAY_WAIT_DELAY=0 \
+  "$PI_DISPLAY_SHELL" "$ROOT/deploy/client/detect-pi-display.sh"
+grep -F "Option \"kmsdev\" \"$FIXTURE_DIR/dev/dri/card0\"" \
+  "$FIXTURE_DIR/etc/X11/xorg.conf.d/99-thinpi-vc4.conf" >/dev/null
 
 echo "Client deployment script checks passed."

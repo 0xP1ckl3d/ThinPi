@@ -12,7 +12,7 @@ TTYPath=/dev/tty7
 StandardInput=tty
 StandardOutput=journal
 StandardError=journal
-ExecStart=/usr/bin/xinit /usr/local/libexec/thinpi-xinitrc -- /usr/lib/xorg/Xorg.wrap :0 -nolisten tcp vt7 -keeptty
+ExecStart=/usr/bin/xinit /usr/local/libexec/thinpi-xinitrc -- :0 -nolisten tcp vt7 -keeptty
 Restart=always
 RestartSec=2
 Environment=THINPI_AGENT_SOCKET=/run/thinpi/agent.sock

@@ -1,0 +1,19 @@
+[Unit]
+Description=ThinPi kiosk user interface
+After=thinpi-agent.service systemd-user-sessions.service
+Requires=thinpi-agent.service
+Conflicts=getty@tty7.service
+
+[Service]
+Type=simple
+ExecStartPre=/usr/local/libexec/thinpi-detect-display
+ExecStart=/usr/sbin/runuser -u thinpi -- /usr/bin/xinit /usr/local/libexec/thinpi-xinitrc -- /usr/lib/xorg/Xorg.wrap :0 -nolisten tcp vt7 -keeptty
+ExecStartPost=/usr/bin/chvt 7
+Restart=always
+RestartSec=2
+Environment=THINPI_AGENT_SOCKET=/run/thinpi/agent.sock
+EnvironmentFile=-/etc/thinpi/ui.env
+Environment=QT_LOGGING_RULES=*.debug=false
+
+[Install]
+WantedBy=thinpi.target

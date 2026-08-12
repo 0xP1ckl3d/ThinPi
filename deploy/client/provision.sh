@@ -119,7 +119,6 @@ fi
 if [ "$PLATFORM" = raspberry-pi ]; then
   apt-get install -y --no-install-recommends qt6-svg-plugins
 fi
-[ -x /usr/lib/xorg/Xorg.wrap ] || { echo "xserver-xorg-legacy did not install /usr/lib/xorg/Xorg.wrap" >&2; exit 1; }
 QT_VERSION=$(dpkg-query -W -f='${Version}' "$QT_CORE_PACKAGE")
 dpkg --compare-versions "$QT_VERSION" ge 6.4 || { echo "ThinPi requires Qt 6.4 or newer; installed $QT_CORE_PACKAGE is $QT_VERSION" >&2; exit 1; }
 if apt-cache show freerdp3-x11 >/dev/null 2>&1; then apt-get install -y freerdp3-x11; else apt-get install -y freerdp2-x11; fi
@@ -237,7 +236,11 @@ if [ "$STAGED_BINARIES" = true ]; then
   install -m 0755 /usr/local/bin/thinpi-launcher /usr/bin/thinpi-launcher
 fi
 install -m 0644 "$SCRIPT_DIR/thinpi-agent.service" /etc/systemd/system/thinpi-agent.service
-install -m 0644 "$SCRIPT_DIR/thinpi-ui.service" /etc/systemd/system/thinpi-ui.service
+if [ "$PLATFORM" = raspberry-pi ]; then
+  install -m 0644 "$SCRIPT_DIR/thinpi-ui-pi.service" /etc/systemd/system/thinpi-ui.service
+else
+  install -m 0644 "$SCRIPT_DIR/thinpi-ui.service" /etc/systemd/system/thinpi-ui.service
+fi
 install -m 0644 "$SCRIPT_DIR/thinpi-maintenance@.service" /etc/systemd/system/thinpi-maintenance@.service
 install -m 0644 "$SCRIPT_DIR/thinpi.target" /etc/systemd/system/thinpi.target
 install -d -o root -g root -m 0755 /usr/local/libexec /etc/X11/xorg.conf.d \
@@ -249,11 +252,13 @@ install -m 0644 "$SCRIPT_DIR/hardening/Xwrapper.config" /etc/X11/Xwrapper.config
 install -m 0644 "$SCRIPT_DIR/hardening/10-thinpi-kiosk.conf" /etc/X11/xorg.conf.d/10-thinpi-kiosk.conf
 install -m 0644 "$SCRIPT_DIR/hardening/99-thinpi-ssh.conf" /etc/ssh/sshd_config.d/99-thinpi.conf
 if [ "$PLATFORM" = raspberry-pi ]; then
+  [ -x /usr/lib/xorg/Xorg.wrap ] || { echo "xserver-xorg-legacy did not install /usr/lib/xorg/Xorg.wrap" >&2; exit 1; }
   sed -i 's/^needs_root_rights=auto$/needs_root_rights=yes/' /etc/X11/Xwrapper.config
-  install -m 0755 "$SCRIPT_DIR/configure-pi-xorg.sh" /usr/local/libexec/thinpi-configure-pi-xorg
-  install -d -o root -g root -m 0755 /etc/systemd/system/thinpi-ui.service.d
-  install -m 0644 "$SCRIPT_DIR/thinpi-ui-pi.conf" /etc/systemd/system/thinpi-ui.service.d/raspberry-pi.conf
-  /usr/local/libexec/thinpi-configure-pi-xorg
+  install -m 0755 "$SCRIPT_DIR/detect-pi-display.sh" /usr/local/libexec/thinpi-detect-display
+  rm -f /usr/local/libexec/thinpi-configure-pi-xorg
+  rm -f /etc/systemd/system/thinpi-ui.service.d/raspberry-pi.conf
+  rmdir /etc/systemd/system/thinpi-ui.service.d 2>/dev/null || true
+  /usr/local/libexec/thinpi-detect-display
 fi
 if [ "$DISABLE_SSH_PASSWORDS" = true ]; then
   printf '%s\n' 'PasswordAuthentication no' 'KbdInteractiveAuthentication no' > /etc/ssh/sshd_config.d/00-thinpi-passwords.conf
