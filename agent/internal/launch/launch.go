@@ -482,6 +482,9 @@ func VNCCommand(binary string, x api.Manifest) (Command, error) {
 	if strings.ContainsAny(x.Username, "\r\n\x00") {
 		return Command{}, errors.New("invalid VNC username")
 	}
+	if strings.ContainsRune(x.Password, '\x00') {
+		return Command{}, errors.New("invalid VNC password")
+	}
 	cfg := VNCConfig{Fullscreen: true, Shared: true}
 	if len(x.Config) > 0 {
 		if err := json.Unmarshal(x.Config, &cfg); err != nil {
@@ -492,15 +495,15 @@ func VNCCommand(binary string, x api.Manifest) (Command, error) {
 	if strings.Contains(host, ":") {
 		host = "[" + host + "]"
 	}
-	args := []string{host + "::" + strconv.Itoa(x.Port), fmt.Sprintf("-FullScreen=%d", boolInt(cfg.Fullscreen)), fmt.Sprintf("-Shared=%d", boolInt(cfg.Shared)), fmt.Sprintf("-ViewOnly=%d", boolInt(cfg.ViewOnly)), fmt.Sprintf("-AcceptClipboard=%d", boolInt(cfg.Clipboard)), fmt.Sprintf("-SendClipboard=%d", boolInt(cfg.Clipboard))}
+	args := []string{host + "::" + strconv.Itoa(x.Port), "-SecurityTypes=TLSPlain", fmt.Sprintf("-FullScreen=%d", boolInt(cfg.Fullscreen)), fmt.Sprintf("-Shared=%d", boolInt(cfg.Shared)), fmt.Sprintf("-ViewOnly=%d", boolInt(cfg.ViewOnly)), fmt.Sprintf("-AcceptClipboard=%d", boolInt(cfg.Clipboard)), fmt.Sprintf("-SendClipboard=%d", boolInt(cfg.Clipboard))}
 	var environment []string
 	if x.Username != "" {
 		environment = append(environment, "VNC_USERNAME="+x.Username)
 	}
 	if x.Password != "" {
-		args = append(args, "-PasswordFile={password_file}")
+		environment = append(environment, "VNC_PASSWORD="+x.Password)
 	}
-	return Command{Path: binary, Args: args, Password: x.Password, Env: environment}, nil
+	return Command{Path: binary, Args: args, Env: environment}, nil
 }
 
 func boolInt(v bool) int {

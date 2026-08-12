@@ -71,24 +71,34 @@ func TestMoonlightDirectLaunch(t *testing.T) {
 	}
 }
 
-func TestVNCPasswordUsesCredentialFilePlaceholder(t *testing.T) {
+func TestVNCTLSPlainUsesEnvironmentCredentials(t *testing.T) {
 	manifest := api.Manifest{Protocol: "vnc", Host: "linux.example", Port: 5900, Username: "student", Password: "vnc-secret", Config: json.RawMessage(`{"fullscreen":true,"shared":true,"clipboard":false}`)}
 	command, err := VNCCommand("xtigervncviewer", manifest)
 	if err != nil {
 		t.Fatal(err)
 	}
 	joined := strings.Join(command.Args, " ")
-	if strings.Contains(joined, manifest.Password) || command.Stdin != "" {
-		t.Fatal("VNC password leaked outside the protected credential-file path")
+	if strings.Contains(joined, manifest.Password) || command.Stdin != "" || command.Password != "" {
+		t.Fatal("TLSPlain VNC password leaked into argv/stdin or selected legacy VncAuth")
 	}
-	if command.Password != manifest.Password || !strings.Contains(joined, "-PasswordFile={password_file}") {
-		t.Fatalf("credential file not configured: %#v", command)
+	if strings.Contains(joined, "-PasswordFile") || !strings.Contains(joined, "-SecurityTypes=TLSPlain") {
+		t.Fatalf("TLSPlain authentication not configured: %#v", command)
 	}
 	if !strings.Contains(joined, "linux.example::5900") {
 		t.Fatalf("unexpected VNC target: %s", joined)
 	}
 	if strings.Contains(joined, manifest.Username) || !slices.Contains(command.Env, "VNC_USERNAME="+manifest.Username) {
 		t.Fatalf("VNC username not isolated in its supported environment setting: %#v", command)
+	}
+	if !slices.Contains(command.Env, "VNC_PASSWORD="+manifest.Password) {
+		t.Fatalf("VNC password not provided through TLSPlain environment setting: %#v", command)
+	}
+}
+
+func TestVNCTLSPlainRejectsNULPassword(t *testing.T) {
+	_, err := VNCCommand("xtigervncviewer", api.Manifest{Host: "linux.example", Port: 5900, Password: "bad\x00password"})
+	if err == nil {
+		t.Fatal("VNC password containing NUL was accepted for a process environment")
 	}
 }
 
