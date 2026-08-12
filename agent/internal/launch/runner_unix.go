@@ -37,6 +37,12 @@ func (PlatformRunner) Run(ctx context.Context, c Command) error {
 			sessionHome = u.HomeDir
 		}
 	}
+	configure := func(cmd *exec.Cmd) {
+		configureNativeCommand(cmd, credential, sessionHome, c.Env)
+	}
+	if err := ensureMoonlightPaired(ctx, c, configure); err != nil {
+		return err
+	}
 	args := append([]string(nil), c.Args...)
 	var materialFiles []string
 	defer func() {
@@ -113,17 +119,10 @@ func (PlatformRunner) Run(ctx context.Context, c Command) error {
 	if c.Stdin != "" {
 		cmd.Stdin = strings.NewReader(c.Stdin)
 	}
-	if len(c.Env) > 0 {
-		cmd.Env = append(os.Environ(), c.Env...)
-	}
 	// The root daemon owns the device credential. Native clients drop to the
 	// kiosk identity so Xorg, audio, input and Moonlight pairing state work in
 	// the same session as the launcher.
-	if credential != nil {
-		cmd.SysProcAttr = &syscall.SysProcAttr{Credential: credential, Setpgid: true}
-		cmd.Env = append(os.Environ(), "HOME="+sessionHome, "USER=thinpi", "LOGNAME=thinpi", "THINPI_SESSION_HOME="+sessionHome)
-		cmd.Env = append(cmd.Env, c.Env...)
-	}
+	configure(cmd)
 	err := cmd.Run()
 	if err != nil && ctx.Err() == nil {
 		diagnostic := redactClientOutput(output.String(), c)
@@ -140,50 +139,16 @@ func (PlatformRunner) Run(ctx context.Context, c Command) error {
 	return err
 }
 
-type boundedOutput struct {
-	limit int
-	data  []byte
-}
-
-func (b *boundedOutput) Write(p []byte) (int, error) {
-	written := len(p)
-	b.data = append(b.data, p...)
-	if len(b.data) > b.limit {
-		b.data = append([]byte(nil), b.data[len(b.data)-b.limit:]...)
+func configureNativeCommand(cmd *exec.Cmd, credential *syscall.Credential, sessionHome string, environment []string) {
+	if len(environment) > 0 {
+		cmd.Env = append(os.Environ(), environment...)
 	}
-	return written, nil
-}
-
-func (b *boundedOutput) String() string { return string(b.data) }
-
-func redactClientOutput(output string, command Command) string {
-	secrets := []string{}
-	for _, line := range strings.Split(command.Stdin, "\n") {
-		if strings.HasPrefix(line, "/p:") && len(line) > 3 {
-			secrets = append(secrets, line[3:])
-		}
+	if credential == nil {
+		return
 	}
-	if command.Password != "" {
-		secrets = append(secrets, command.Password)
-	}
-	for _, material := range command.Files {
-		if strings.Contains(material.Placeholder, "password") || strings.Contains(material.Placeholder, "identity") {
-			secret := strings.TrimSpace(material.Content)
-			if secret != "" {
-				secrets = append(secrets, secret)
-			}
-		}
-	}
-	for _, secret := range secrets {
-		output = strings.ReplaceAll(output, secret, "[redacted]")
-	}
-	output = strings.Map(func(r rune) rune {
-		if r == '\n' || r == '\t' || r >= 32 && r != 127 {
-			return r
-		}
-		return -1
-	}, output)
-	return strings.TrimSpace(output)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: credential, Setpgid: true}
+	cmd.Env = append(os.Environ(), "HOME="+sessionHome, "USER=thinpi", "LOGNAME=thinpi", "THINPI_SESSION_HOME="+sessionHome)
+	cmd.Env = append(cmd.Env, environment...)
 }
 
 func clientExitedNormally(output string) bool {

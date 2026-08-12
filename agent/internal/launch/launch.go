@@ -60,12 +60,21 @@ type Controller interface {
 	SessionEvent(context.Context, int64, int64, string, string, any) error
 }
 type Command struct {
-	Path     string
-	Args     []string
-	Stdin    string
-	Password string
-	Env      []string
-	Files    []FileInput
+	Path             string
+	Args             []string
+	Stdin            string
+	Password         string
+	Env              []string
+	Files            []FileInput
+	MoonlightPairing *MoonlightPairing
+}
+
+type MoonlightPairing struct {
+	Host            string
+	Username        string
+	Password        string
+	SunshineAPIPort int
+	ClientName      string
 }
 type FileInput struct {
 	Placeholder string
@@ -89,6 +98,57 @@ type ClientRuntimeError struct {
 }
 
 func (e *ClientRuntimeError) Error() string { return e.Message }
+
+type boundedOutput struct {
+	limit int
+	data  []byte
+}
+
+func (b *boundedOutput) Write(p []byte) (int, error) {
+	written := len(p)
+	b.data = append(b.data, p...)
+	if len(b.data) > b.limit {
+		b.data = append([]byte(nil), b.data[len(b.data)-b.limit:]...)
+	}
+	return written, nil
+}
+
+func (b *boundedOutput) String() string { return string(b.data) }
+
+func redactClientOutput(output string, command Command) string {
+	secrets := []string{}
+	for _, line := range strings.Split(command.Stdin, "\n") {
+		if strings.HasPrefix(line, "/p:") && len(line) > 3 {
+			secrets = append(secrets, line[3:])
+		}
+	}
+	if command.Password != "" {
+		secrets = append(secrets, command.Password)
+	}
+	if command.MoonlightPairing != nil {
+		secrets = append(secrets, command.MoonlightPairing.Password)
+	}
+	for _, material := range command.Files {
+		if strings.Contains(material.Placeholder, "password") || strings.Contains(material.Placeholder, "identity") {
+			secret := strings.TrimSpace(material.Content)
+			if secret != "" {
+				secrets = append(secrets, secret)
+			}
+		}
+	}
+	for _, secret := range secrets {
+		if secret != "" {
+			output = strings.ReplaceAll(output, secret, "[redacted]")
+		}
+	}
+	output = strings.Map(func(r rune) rune {
+		if r == '\n' || r == '\t' || r >= 32 && r != 127 {
+			return r
+		}
+		return -1
+	}, output)
+	return strings.TrimSpace(output)
+}
 
 type ExecRunner struct{}
 
@@ -438,6 +498,8 @@ type MoonlightConfig struct {
 	Audio              bool   `json:"audio"`
 	Gamepad            bool   `json:"gamepad"`
 	PerformanceOverlay bool   `json:"performance_overlay"`
+	SunshineAPIPort    int    `json:"sunshine_api_port"`
+	PairingName        string `json:"pairing_name"`
 }
 
 type VNCConfig struct {
@@ -556,7 +618,7 @@ func MoonlightCommand(binary string, x api.Manifest) (Command, error) {
 	if err := validateHost(x.Host, x.Port); err != nil {
 		return Command{}, err
 	}
-	cfg := MoonlightConfig{Application: "Desktop", Width: 1920, Height: 1080, FPS: 60, BitrateKbps: 20000, Audio: true, Gamepad: true}
+	cfg := MoonlightConfig{Application: "Desktop", Width: 1920, Height: 1080, FPS: 60, BitrateKbps: 20000, Audio: true, Gamepad: true, SunshineAPIPort: 47990, PairingName: "ThinPi"}
 	if len(x.Config) > 0 {
 		if err := json.Unmarshal(x.Config, &cfg); err != nil {
 			return Command{}, err
@@ -564,6 +626,15 @@ func MoonlightCommand(binary string, x api.Manifest) (Command, error) {
 	}
 	if cfg.Application == "" || len(cfg.Application) > 128 || strings.ContainsAny(cfg.Application, "\r\n\x00") {
 		return Command{}, errors.New("invalid Moonlight application")
+	}
+	if cfg.SunshineAPIPort < 1 || cfg.SunshineAPIPort > 65535 {
+		return Command{}, errors.New("invalid Sunshine API port")
+	}
+	if cfg.PairingName == "" || len(cfg.PairingName) > 128 || strings.ContainsAny(cfg.PairingName, "\r\n\x00") {
+		return Command{}, errors.New("invalid Moonlight pairing name")
+	}
+	if strings.ContainsAny(x.Username, ":\r\n\x00") || strings.ContainsRune(x.Password, '\x00') {
+		return Command{}, errors.New("invalid Sunshine admin credential")
 	}
 	if cfg.Width < 256 || cfg.Width > 8192 || cfg.Height < 256 || cfg.Height > 8192 || cfg.FPS < 1 || cfg.FPS > 240 || cfg.BitrateKbps < 500 || cfg.BitrateKbps > 500000 {
 		return Command{}, errors.New("invalid Moonlight stream settings")
@@ -601,7 +672,14 @@ func MoonlightCommand(binary string, x api.Manifest) (Command, error) {
 		args = append(args, "--no-performance-overlay")
 	}
 	args = append(args, "--no-audio-on-host")
-	return Command{Path: binary, Args: args}, nil
+	return Command{
+		Path: binary,
+		Args: args,
+		MoonlightPairing: &MoonlightPairing{
+			Host: x.Host, Username: x.Username, Password: x.Password,
+			SunshineAPIPort: cfg.SunshineAPIPort, ClientName: cfg.PairingName,
+		},
+	}, nil
 }
 func MockCommand(d time.Duration) Command {
 	if d <= 0 {

@@ -315,17 +315,22 @@ compatible and the assigned credential is correct.
 ```sh
 command -v moonlight-qt
 moonlight-qt --help
-sudo -u thinpi env HOME=/home/thinpi DISPLAY=:0 \
-  XAUTHORITY=/home/thinpi/.Xauthority moonlight-qt pair sunshine-host
 id thinpi
+journalctl -b -u thinpi-agent -o cat --no-pager | tail -100
 ```
 
 On amd64, `command -v` should return `/usr/local/bin/moonlight-qt`; the official
 AppImage is extracted below `/opt/thinpi/moonlight`. On Raspberry Pi, use
 `raspi-config` to select the audio output and confirm PulseAudio. On
 Ubuntu/Lubuntu, confirm PipeWire and `pipewire-pulse` instead. In both cases,
-the pairing must exist for the `thinpi` identity and that user must belong to
-the input, audio, video, and render groups.
+the `thinpi` user must belong to the input, audio, video, and render groups.
+
+If the host is unpaired, assign a password credential containing the Sunshine
+Web UI administrator username and password to the connection. ThinPi performs
+pairing automatically and stores it for the `thinpi` identity. Check that the
+Sunshine Web UI is reachable on port `47990` (or the configured
+`sunshine_api_port`) and that Sunshine permits PIN submission from the ThinPi
+network. Do not run `moonlight-qt pair` manually.
 
 ### Target works from controller but not the client
 

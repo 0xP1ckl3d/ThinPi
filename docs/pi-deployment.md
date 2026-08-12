@@ -341,19 +341,18 @@ sudo raspi-config
 Select the PulseAudio/audio output options appropriate to the attached display,
 then reboot if requested.
 
-Moonlight pairing is stored per Linux identity. ThinPi launches Moonlight as
-the `thinpi` user, so pairing performed only as `piadmin` is not sufficient.
-After the first ThinPi boot, pair using the `thinpi` home and running display:
+Create a password credential containing the Sunshine Web UI administrator
+username and password, then assign it to the Moonlight connection. On first
+launch, ThinPi checks the pairing under the `thinpi` identity, generates a PIN,
+submits it through Sunshine's authenticated API, persists the Moonlight pairing
+state in `/home/thinpi`, and starts the stream. No interactive or command-line
+pairing is required. The default Sunshine Web UI/API port is `47990`; override
+`sunshine_api_port` in the connection's advanced JSON only when Sunshine uses a
+non-default port.
 
-```sh
-sudo -u thinpi env \
-  HOME=/home/thinpi USER=thinpi LOGNAME=thinpi \
-  DISPLAY=:0 XAUTHORITY=/home/thinpi/.Xauthority \
-  moonlight-qt pair sunshine-host.home.example
-```
-
-Complete the displayed PIN on the Sunshine host. Then verify the pairing as the
-same identity before assigning the production connection.
+ThinPi trusts Sunshine's self-signed Web UI certificate on first use and pins it
+for later pairing attempts. A changed certificate is rejected rather than
+sending the stored administrator password to an unverified endpoint.
 
 ## 10. Reboot into ThinPi
 

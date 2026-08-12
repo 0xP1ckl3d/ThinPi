@@ -59,7 +59,7 @@ func TestRejectsUnsafeManifest(t *testing.T) {
 	}
 }
 func TestMoonlightDirectLaunch(t *testing.T) {
-	c, err := MoonlightCommand("moonlight-qt", api.Manifest{Host: "gaming.local", Port: 47984, Config: json.RawMessage(`{"application":"Desktop","width":1920,"height":1080,"fps":60,"bitrate_kbps":20000}`)})
+	c, err := MoonlightCommand("moonlight-qt", api.Manifest{Host: "gaming.local", Port: 47984, Username: "sunshine-admin", Password: "pairing-secret", Config: json.RawMessage(`{"application":"Desktop","width":1920,"height":1080,"fps":60,"bitrate_kbps":20000}`)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,6 +68,15 @@ func TestMoonlightDirectLaunch(t *testing.T) {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("missing %q in %q", want, joined)
 		}
+	}
+	if strings.Contains(joined, "sunshine-admin") || strings.Contains(joined, "pairing-secret") {
+		t.Fatal("Sunshine administrator credential leaked into Moonlight arguments")
+	}
+	if c.MoonlightPairing == nil || c.MoonlightPairing.Host != "gaming.local" || c.MoonlightPairing.Username != "sunshine-admin" || c.MoonlightPairing.Password != "pairing-secret" {
+		t.Fatalf("automatic pairing metadata missing: %#v", c.MoonlightPairing)
+	}
+	if c.MoonlightPairing.SunshineAPIPort != 47990 || c.MoonlightPairing.ClientName != "ThinPi" {
+		t.Fatalf("unexpected automatic pairing defaults: %#v", c.MoonlightPairing)
 	}
 }
 

@@ -156,7 +156,7 @@ const protocolDefaults = {
   rdp:{port:3389,config:{fullscreen:true,dynamic_resolution:true,audio:true,clipboard:false,certificate_mode:'tofu'}},
   vnc:{port:5900,config:{fullscreen:true,shared:true,view_only:false,clipboard:false}},
   ssh:{port:22,config:{terminal_title:'Secure shell'}},
-  moonlight:{port:47984,config:{application:'Desktop',width:1920,height:1080,fps:60,bitrate_kbps:20000,audio:true,gamepad:true}},
+  moonlight:{port:47984,config:{application:'Desktop',width:1920,height:1080,fps:60,bitrate_kbps:20000,audio:true,gamepad:true,sunshine_api_port:47990,pairing_name:'ThinPi'}},
   mock:{port:1,config:{}}
 };
 $('#connection-protocol').onchange = event => { const defaults=protocolDefaults[event.target.value]; $('#connection-form [name=port]').value=defaults.port; $('#connection-form [name=protocol_config]').value=JSON.stringify(defaults.config,null,2); syncConnectionFields(); fillConnectionCredentialOptions(''); };
