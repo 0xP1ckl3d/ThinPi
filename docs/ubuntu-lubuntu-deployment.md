@@ -35,15 +35,15 @@ sudo systemctl enable --now ssh
 ip -br address
 ```
 
-Install your public key on both VMs and open a fresh session to prove it works:
+Public keys are optional. If you want them, install them with:
 
 ```sh
 ssh-copy-id <CONTROLLER_USER>@10.10.10.60
 ssh-copy-id <CLIENT_USER>@<CLIENT_IP>
 ```
 
-Do not provision the client without a working key. ThinPi deliberately disables
-SSH password login during provisioning.
+Whether you use passwords or keys, open a fresh SSH session and verify `sudo`
+before provisioning. ThinPi preserves the host's existing SSH password setting.
 
 ## Part B — install the controller on Ubuntu Server
 
@@ -228,13 +228,12 @@ dpkg --print-architecture
 grep -E '^(PRETTY_NAME|VERSION_ID|VERSION_CODENAME)=' /etc/os-release
 go version
 qmake6 -query QT_VERSION
-test -s "$HOME/.ssh/authorized_keys" && echo 'SSH recovery key present'
 curl --fail --show-error --cacert /tmp/thinpi-ca.crt \
   https://10.10.10.60:8443/healthz
 ```
 
 Required results are `x86_64`, `amd64`, Lubuntu/Ubuntu `26.04`, Go 1.25 or
-newer, Qt 6.4 or newer, `SSH recovery key present`, and controller health JSON.
+newer, Qt 6.4 or newer, a working administrator SSH login, and controller health JSON.
 Do not continue if any check fails.
 
 ## Part F — build, enrol, and provision the Lubuntu client

@@ -12,10 +12,10 @@ PCs and generic ARM64 devices. Complete the
 [controller runbook](controller-deployment.md) first.
 
 Provisioning is intentionally invasive. It installs native clients, creates a
-non-login kiosk user, disables password SSH and ordinary virtual-console
+non-login kiosk user, preserves the configured administrator SSH authentication, and blocks ordinary virtual-console
 switching, disables desktop display managers, and changes the default systemd
 target. It also installs the controller-ticketed administrator maintenance
-console. Use a recoverable SD card and prove SSH public-key access first.
+console. Use a recoverable SD card and prove administrator SSH access first.
 
 The values below are examples only. ThinPi does not create these names or make
 them resolve. The start-to-finish guide recommends an IP URL for the first
@@ -68,8 +68,7 @@ In Raspberry Pi Imager:
 5. create administrator `piadmin` with a strong recovery password;
 6. set timezone/keyboard/network;
 7. enable SSH;
-8. select **public-key authentication only** and install your administrator
-   public key;
+8. select password or public-key SSH authentication according to your preference;
 9. write and verify the media.
 
 Do not use the Desktop image. ThinPi installs its own Xorg kiosk environment.
@@ -80,7 +79,7 @@ Boot the Pi, wait for networking, then connect from the workstation:
 ssh piadmin@thinpi-living-room
 ```
 
-If this key-based login does not work, stop. Fix it before provisioning.
+If this administrator login does not work, stop. Fix it before provisioning.
 
 ## 3. Verify OS, architecture, time, and SSH recovery
 
@@ -91,7 +90,6 @@ uname -m
 dpkg --print-architecture
 grep -E '^(PRETTY_NAME|VERSION_CODENAME)=' /etc/os-release
 timedatectl status
-test -s "$HOME/.ssh/authorized_keys" && echo "SSH key present"
 sudo -n true || sudo true
 ```
 
@@ -101,7 +99,6 @@ Required results:
 aarch64
 arm64
 VERSION_CODENAME=trixie
-SSH key present
 ```
 
 `timedatectl` must show synchronized time. TLS and 30-second launch tickets fail
@@ -277,7 +274,8 @@ It then:
 - installs the administrator-only, one-use-ticket maintenance console;
 - restricts Chromium to the controller origin with managed policy;
 - disables desktop display managers;
-- disables SSH password, root, forwarding, and X11 access;
+- disables SSH root, forwarding, and X11 access while preserving the existing
+  password-authentication setting;
 - selects `thinpi.target` as the default boot target.
 
 Successful output ends with:
@@ -390,7 +388,7 @@ or the device token to the launcher environment.
 
 ## 13. Updating a locked Pi
 
-Prefer updating from the separate administrator workstation over its SSH key:
+Prefer updating from the separate administrator workstation over SSH:
 
 ```sh
 scripts/deploy-pi.sh piadmin@thinpi-living-room

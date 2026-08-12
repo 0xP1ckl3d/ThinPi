@@ -6,9 +6,9 @@ ThinPi login screen; ordinary users never receive a Linux desktop or local OS
 login.
 
 Provisioning is intentionally invasive. It changes the default systemd target,
-masks local getties, disables display managers and SSH passwords, and installs
+masks local getties, disables display managers, and installs
 the controller-authorised maintenance console. Use a dedicated or recoverable
-machine and prove SSH public-key access before continuing.
+machine and prove the existing administrator SSH login before continuing.
 
 ## 1. Choose supported hardware and OS
 
@@ -47,17 +47,17 @@ During the Debian installer:
 5. set the correct timezone and enable time synchronisation;
 6. give the client a DHCP reservation or stable address.
 
-Install the workstation's public SSH key, then prove a new key-only session
-works:
+Prove the administrator can open a fresh SSH session and use `sudo`:
 
 ```sh
-ssh-copy-id thinpiadmin@thinpi-canary
 ssh thinpiadmin@thinpi-canary
-test -s "$HOME/.ssh/authorized_keys" && echo 'SSH recovery key present'
 sudo true
 ```
 
-Do not provision until this succeeds. Provisioning disables SSH password login.
+Password or public-key authentication may be used. Provisioning preserves the
+host's existing password-authentication setting by default. To deliberately
+switch to key-only SSH, first install and test a public key, then add
+`--disable-ssh-passwords` to the provisioning command.
 
 For an existing Lubuntu 26.04 VM, keep the administrator account created by the
 installer and enable SSH now:
@@ -283,7 +283,7 @@ this release.
 
 ## 12. Recovery
 
-Use the administrator SSH key, or the controller-authorised local maintenance
+Use the existing administrator SSH login, or the controller-authorised local maintenance
 action. To temporarily leave kiosk mode through SSH:
 
 ```sh

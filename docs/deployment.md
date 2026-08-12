@@ -398,7 +398,7 @@ On the workstation, open Raspberry Pi Imager.
 6. Set a strong password. It is needed for `sudo` in local maintenance.
 7. Set locale, keyboard, timezone and Wi-Fi if Ethernet is unavailable.
 8. Enable SSH.
-9. Select public-key authentication and add your workstation's SSH public key.
+9. Select password or public-key SSH authentication according to your preference.
 10. Write and verify the SD card/SSD.
 
 Boot the Pi and wait two minutes. From WSL:
@@ -413,8 +413,9 @@ If that name does not resolve, find the Pi's address in your router and use:
 ssh piadmin@PI_ADDRESS
 ```
 
-Do not provision until key-based SSH works. Provisioning disables SSH password
-login so the key is the recovery path.
+Do not provision until a fresh administrator SSH login works. Provisioning
+preserves the host's existing password-authentication setting unless you
+explicitly pass `--disable-ssh-passwords`.
 
 ## Phase 9 — verify and prepare the Raspberry Pi
 
@@ -425,12 +426,11 @@ uname -m
 dpkg --print-architecture
 grep -E '^(PRETTY_NAME|VERSION_CODENAME)=' /etc/os-release
 timedatectl status
-test -s "$HOME/.ssh/authorized_keys" && echo 'SSH recovery key present'
 sudo true
 ```
 
 Required results include `aarch64`, `arm64`, `VERSION_CODENAME=trixie`, a
-synchronised clock, and `SSH recovery key present`.
+synchronised clock, and a working administrator SSH login.
 
 Install build tools:
 
@@ -501,7 +501,7 @@ The first run should end with:
 Binaries staged in /usr/local/bin. Run /tmp/thinpi/deploy-client/provision.sh next.
 ```
 
-If it reports a missing Go, Qt, CMake, Ninja, compiler, SSH key, or wrong CPU
+If it reports a missing Go, Qt, CMake, Ninja, compiler, or wrong CPU
 architecture, correct that exact prerequisite and rerun the command.
 
 ## Phase 12 — create a one-time client enrolment token
@@ -544,7 +544,8 @@ The provisioner will:
 - install RDP, VNC, Moonlight and the locked single-purpose SSH terminal;
 - disable ordinary virtual-terminal switching from the kiosk;
 - mask local getty login screens;
-- disable root/password/forwarding/X11 access to the Pi's SSH server;
+- disable root/forwarding/X11 access to the Pi's SSH server while preserving
+  its existing password-authentication setting;
 - restrict the managed admin browser to the controller origin;
 - configure `piadmin` as the one allowed maintenance console account;
 - set `thinpi.target` as the default boot target.

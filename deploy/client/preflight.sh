@@ -29,5 +29,4 @@ GO_VERSION=$(go env GOVERSION | sed 's/^go//')
 dpkg --compare-versions "$GO_VERSION" ge 1.25 || { echo "Go 1.25 or newer is required; found $GO_VERSION" >&2; exit 1; }
 QT_VERSION=$(qmake6 -query QT_VERSION)
 dpkg --compare-versions "$QT_VERSION" ge 6.4 || { echo "Qt 6.4 or newer is required; found $QT_VERSION" >&2; exit 1; }
-test -s "$HOME/.ssh/authorized_keys" || { echo "Administrator authorized_keys is empty; provisioning will refuse SSH lock-down" >&2; exit 1; }
 printf 'Preflight passed: %s %s, Go %s, Qt %s, %s, Pi=%s\n' "$THINPI_OS_ID" "$THINPI_OS_VERSION" "$GO_VERSION" "$QT_VERSION" "$ARCH" "$IS_PI"

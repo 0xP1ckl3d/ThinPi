@@ -208,7 +208,7 @@ has this order:
 2. choose stable controller DNS and TLS;
 3. start the production controller and create its first administrator;
 4. install Debian 13, Ubuntu/Lubuntu 24.04 or 26.04 LTS, or Raspberry Pi OS Lite 64-bit on a Pi;
-5. enable SSH public-key authentication and verify it works;
+5. enable SSH and verify the administrator login works;
 6. build and stage matching amd64 or arm64 agent/launcher binaries;
 7. create a one-time device enrolment token;
 8. run the generic client provisioner;
@@ -261,8 +261,9 @@ Production does not seed `admin`, `wife`, or `daughter`; does not accept
 does not run simulated desktops. Production sessions start real native clients
 and return safe, useful connection failures.
 
-The client becomes a kiosk, but it remains maintainable over the administrator SSH
-key created before provisioning. An authenticated ThinPi administrator also
+The client becomes a kiosk, but it preserves the host's existing administrator
+SSH password/key authentication by default. Key-only SSH is an explicit
+provisioning option, not a requirement. An authenticated ThinPi administrator also
 gets a one-use, device-bound **Local maintenance** action that opens the fixed
 local administrator console and signs the launcher out. Normal users cannot
 switch virtual terminals or request that console. Updates can run there or,

@@ -11,11 +11,12 @@ Options:
   --ca-certificate FILE          Private controller CA certificate
   --platform auto|generic|raspberry-pi
   --moonlight auto|yes|no        Install supported Moonlight package (default auto)
+  --disable-ssh-passwords        Opt in to key-only administrator SSH
 EOF
 }
 
 SERVER="" TOKEN="" DEVICE_ID="" DEVICE_NAME="ThinPi" CA_FILE=""
-PLATFORM=auto MOONLIGHT=auto
+PLATFORM=auto MOONLIGHT=auto DISABLE_SSH_PASSWORDS=false
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --server) SERVER=${2:-}; shift 2;;
@@ -25,6 +26,7 @@ while [ "$#" -gt 0 ]; do
     --ca-certificate) CA_FILE=${2:-}; shift 2;;
     --platform) PLATFORM=${2:-}; shift 2;;
     --moonlight) MOONLIGHT=${2:-}; shift 2;;
+    --disable-ssh-passwords) DISABLE_SSH_PASSWORDS=true; shift;;
     --help|-h) usage; exit 0;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2;;
   esac
@@ -73,7 +75,12 @@ ADMIN_USER=${SUDO_USER:-}
 [ -n "$ADMIN_USER" ] || { echo "No administrator account with a login shell was found" >&2; exit 1; }
 case "$ADMIN_USER" in root|thinpi|*[!a-z0-9_-]*) echo "Administrator account '$ADMIN_USER' is not valid for the fixed maintenance console" >&2; exit 1;; esac
 ADMIN_HOME=$(getent passwd "$ADMIN_USER" | cut -d: -f6)
-[ -s "$ADMIN_HOME/.ssh/authorized_keys" ] || { echo "Refusing to disable SSH passwords until an administrator public key is installed" >&2; exit 1; }
+if [ "$DISABLE_SSH_PASSWORDS" = true ]; then
+  [ -s "$ADMIN_HOME/.ssh/authorized_keys" ] || {
+    echo "--disable-ssh-passwords requires an administrator public key in $ADMIN_HOME/.ssh/authorized_keys" >&2
+    exit 1
+  }
+fi
 
 export DEBIAN_FRONTEND=noninteractive
 apt-get update
@@ -189,6 +196,12 @@ install -d -o root -g root -m 0755 /usr/local/libexec /etc/X11/xorg.conf.d \
 install -m 0755 "$SCRIPT_DIR/maintenance-session.sh" /usr/local/libexec/thinpi-maintenance-session
 install -m 0644 "$SCRIPT_DIR/hardening/10-thinpi-kiosk.conf" /etc/X11/xorg.conf.d/10-thinpi-kiosk.conf
 install -m 0644 "$SCRIPT_DIR/hardening/99-thinpi-ssh.conf" /etc/ssh/sshd_config.d/99-thinpi.conf
+if [ "$DISABLE_SSH_PASSWORDS" = true ]; then
+  printf '%s\n' 'PasswordAuthentication no' 'KbdInteractiveAuthentication no' > /etc/ssh/sshd_config.d/00-thinpi-passwords.conf
+  chmod 0644 /etc/ssh/sshd_config.d/00-thinpi-passwords.conf
+else
+  rm -f /etc/ssh/sshd_config.d/00-thinpi-passwords.conf
+fi
 [ -z "$CA_FILE" ] || {
   install -m 0644 "$CA_FILE" /etc/thinpi/controller-ca.pem
   install -m 0644 "$CA_FILE" /usr/local/share/ca-certificates/thinpi-controller.crt

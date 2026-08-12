@@ -52,7 +52,7 @@ vcgencmd get_throttled
 | SSH wrong host key | connection fails closed with no trust prompt | Pending host |
 | SSH local escape | no tabs/local shell, OpenSSH escapes, forwarding, logs or argv password | Pending hardware |
 | Device revocation | revoked Pi cannot redeem new launch tickets | Pending hardware |
-| SSH maintenance | key-only admin SSH still works; password/root/forwarding denied | Pending hardware |
+| SSH maintenance | configured admin password/key login still works; root/forwarding denied | Pending hardware |
 | Kiosk key escape | Ctrl+Alt+F1-F6, Ctrl+Alt+Backspace and window keys expose no console/desktop | Pending hardware |
 | Kiosk OS identity | `thinpi` is nologin, non-sudo; getties masked; system paths read-only | Pending hardware |
 | Admin local maintenance | admin-only one-use ticket opens fixed account; `exit` returns signed-out kiosk | Pending hardware |
