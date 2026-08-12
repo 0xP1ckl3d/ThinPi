@@ -152,7 +152,9 @@ sh scripts/deploy-client.sh thinpiadmin@thinpi-canary
 ```
 
 The script detects `amd64` or `arm64`, builds the matching Go agent and Qt
-launcher on the target, and stages them under `/usr/local/bin`. Use the explicit
+launcher on the target, and stages them under `/usr/local/bin`. It opens one
+temporary multiplexed SSH connection, so password-based SSH prompts only once;
+the target may separately prompt once for `sudo`. Use the explicit
 Pi compatibility command only for a Pi:
 
 ```sh

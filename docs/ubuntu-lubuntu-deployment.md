@@ -254,7 +254,10 @@ sh scripts/deploy-client.sh <CLIENT_USER>@<CLIENT_IP>
 ```
 
 The command builds the amd64 agent and launcher natively on Lubuntu and ends
-with `Binaries staged in /usr/local/bin` on a first install.
+with `Binaries staged in /usr/local/bin` on a first install. With password SSH,
+the script asks for the SSH password once and reuses that encrypted connection
+for every transfer and command. The later remote build can separately ask once
+for the client's `sudo` password; SSH login and `sudo` are distinct checks.
 
 On the controller, create a one-use token:
 
