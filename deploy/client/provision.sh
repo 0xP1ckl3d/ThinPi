@@ -117,7 +117,7 @@ if [ "$PLATFORM" = generic ]; then
   apt-get install -y --no-install-recommends xserver-xorg-video-all libgl1-mesa-dri
 fi
 if [ "$PLATFORM" = raspberry-pi ]; then
-  apt-get install -y --no-install-recommends qt6-svg-plugins
+  apt-get install -y --no-install-recommends qt6-svg-plugins xserver-xorg-input-libinput
 fi
 QT_VERSION=$(dpkg-query -W -f='${Version}' "$QT_CORE_PACKAGE")
 dpkg --compare-versions "$QT_VERSION" ge 6.4 || { echo "ThinPi requires Qt 6.4 or newer; installed $QT_CORE_PACKAGE is $QT_VERSION" >&2; exit 1; }

@@ -56,6 +56,7 @@ if grep -E 'systemctl enable .*thinpi\.target' "$ROOT/deploy/client/provision.sh
   exit 1
 fi
 grep -F 'qt6-svg-plugins' "$ROOT/deploy/client/provision.sh" >/dev/null
+grep -F 'xserver-xorg-input-libinput' "$ROOT/deploy/client/provision.sh" >/dev/null
 grep -F 'needs_root_rights=auto' "$ROOT/deploy/client/hardening/Xwrapper.config" >/dev/null
 grep -F "s/^needs_root_rights=auto\$/needs_root_rights=yes/" "$ROOT/deploy/client/provision.sh" >/dev/null
 grep -F "s/^needs_root_rights=auto\$/needs_root_rights=yes/" "$ROOT/deploy/client/stage.sh" >/dev/null
@@ -63,6 +64,9 @@ grep -F '/usr/bin/xinit /usr/local/libexec/thinpi-xinitrc -- :0' "$ROOT/deploy/c
 grep -F 'ExecStartPre=/usr/local/libexec/thinpi-detect-display' "$ROOT/deploy/client/thinpi-ui-pi.service" >/dev/null
 grep -F 'ExecStart=/usr/sbin/runuser -u thinpi -- /usr/bin/xinit' "$ROOT/deploy/client/thinpi-ui-pi.service" >/dev/null
 grep -F 'ExecStartPost=/usr/bin/chvt 7' "$ROOT/deploy/client/thinpi-ui-pi.service" >/dev/null
+grep -F 'Environment=THINPI_SHOW_CURSOR=yes' "$ROOT/deploy/client/thinpi-ui-pi.service" >/dev/null
+grep -F 'THINPI_SHOW_CURSOR' "$ROOT/deploy/client/xinitrc" >/dev/null
+grep -F 'matchbox-window-manager -use_titlebar no &' "$ROOT/deploy/client/xinitrc" >/dev/null
 ! grep -F 'NoNewPrivileges=' "$ROOT/deploy/client/thinpi-ui-pi.service" >/dev/null
 ! grep -F 'PAMName=' "$ROOT/deploy/client/thinpi-ui-pi.service" >/dev/null
 grep -F '[ -x /usr/lib/xorg/Xorg.wrap ]' "$ROOT/deploy/client/provision.sh" >/dev/null

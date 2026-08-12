@@ -12,6 +12,7 @@ ExecStartPost=/usr/bin/chvt 7
 Restart=always
 RestartSec=2
 Environment=THINPI_AGENT_SOCKET=/run/thinpi/agent.sock
+Environment=THINPI_SHOW_CURSOR=yes
 EnvironmentFile=-/etc/thinpi/ui.env
 Environment=QT_LOGGING_RULES=*.debug=false
 

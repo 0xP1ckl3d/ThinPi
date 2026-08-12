@@ -6,5 +6,9 @@ xhost - >/dev/null 2>&1 || true
 xset -dpms
 xset s off
 xset s noblank
-matchbox-window-manager -use_titlebar no -use_cursor no &
+if [ "${THINPI_SHOW_CURSOR:-no}" = yes ]; then
+  matchbox-window-manager -use_titlebar no &
+else
+  matchbox-window-manager -use_titlebar no -use_cursor no &
+fi
 exec /usr/bin/thinpi-launcher
