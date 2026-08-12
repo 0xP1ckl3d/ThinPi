@@ -26,6 +26,9 @@ grep -F 'amd64|arm64' "$ROOT/deploy/client/provision.sh" >/dev/null
 grep -F '24.04|26.04' "$ROOT/deploy/client/lib/platform.sh" >/dev/null
 grep -F 'google-chrome-stable' "$ROOT/deploy/client/provision.sh" >/dev/null
 grep -F 'THINPI_ADMIN_BROWSER' "$ROOT/deploy/client/provision.sh" >/dev/null
+grep -F 'pipewire-audio pipewire-alsa pipewire-pulse' "$ROOT/deploy/client/provision.sh" >/dev/null
+grep -F 'bash /tmp/moonlight-repo.sh' "$ROOT/deploy/client/provision.sh" >/dev/null
+grep -F "THINPI_OS_VERSION\" = 26.04" "$ROOT/deploy/client/provision.sh" >/dev/null
 grep -F 'ControlMaster=yes' "$ROOT/scripts/deploy-client.sh" >/dev/null
 grep -F 'ControlPath=' "$ROOT/scripts/deploy-client.sh" >/dev/null
 grep -F -- '--disable-ssh-passwords' "$ROOT/deploy/client/provision.sh" >/dev/null

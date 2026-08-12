@@ -51,6 +51,12 @@ if [ "$THINPI_OS_FAMILY" = ubuntu ] && [ "$ARCH" != amd64 ]; then
   echo "Ubuntu/Lubuntu ThinPi clients currently require amd64; use Debian 13 for arm64 clients" >&2
   exit 1
 fi
+if [ "$THINPI_OS_FAMILY" = ubuntu ] && [ "$THINPI_OS_VERSION" = 26.04 ] && \
+   [ "$MOONLIGHT" = yes ] && ! command -v moonlight-qt >/dev/null 2>&1 && ! command -v moonlight >/dev/null 2>&1; then
+  echo "Moonlight's upstream APT repository does not publish Ubuntu 26.04 packages." >&2
+  echo "Rerun with --moonlight no. RDP, VNC and locked SSH remain available." >&2
+  exit 1
+fi
 IS_PI=false
 if [ -r /proc/device-tree/model ] && grep -q "Raspberry Pi" /proc/device-tree/model; then IS_PI=true; fi
 if [ "$PLATFORM" = auto ]; then
@@ -83,6 +89,7 @@ if [ "$DISABLE_SSH_PASSWORDS" = true ]; then
 fi
 
 export DEBIAN_FRONTEND=noninteractive
+[ -n "$TOKEN" ] || echo "The enrolment token will be requested only after prerequisite installation succeeds."
 apt-get update
 
 first_available_package() {
@@ -99,12 +106,17 @@ first_available_package() {
 QT_CORE_PACKAGE=$(first_available_package libqt6core6t64 libqt6core6)
 QT_GUI_PACKAGE=$(first_available_package libqt6gui6t64 libqt6gui6)
 QT_NETWORK_PACKAGE=$(first_available_package libqt6network6t64 libqt6network6)
+if [ "$THINPI_OS_FAMILY" = ubuntu ]; then
+  AUDIO_PACKAGES="pipewire-audio pipewire-alsa pipewire-pulse"
+else
+  AUDIO_PACKAGES="pulseaudio"
+fi
 apt-get install -y --no-install-recommends \
   xserver-xorg-core xserver-xorg-legacy xinit x11-xserver-utils \
   matchbox-window-manager "$QT_CORE_PACKAGE" "$QT_GUI_PACKAGE" "$QT_NETWORK_PACKAGE" libqt6qml6 \
   libqt6quick6 libqt6quickcontrols2-6 qml6-module-qtquick \
   qml6-module-qtquick-controls qml6-module-qtquick-layouts \
-  qml6-module-qtquick-window pulseaudio curl ca-certificates jq \
+  qml6-module-qtquick-window $AUDIO_PACKAGES curl ca-certificates jq bash \
   tigervnc-viewer tigervnc-tools openssh-client openssh-server \
   sshpass xterm kbd util-linux
 if [ "$PLATFORM" = generic ]; then
@@ -139,9 +151,9 @@ fi
 install_moonlight_repo() {
   curl -1sLf 'https://dl.cloudsmith.io/public/moonlight-game-streaming/moonlight-qt/setup.deb.sh' -o /tmp/moonlight-repo.sh
   if [ "$PLATFORM" = raspberry-pi ]; then
-    distro=raspbian codename="$VERSION_CODENAME" sh /tmp/moonlight-repo.sh
+    distro=raspbian codename="$VERSION_CODENAME" bash /tmp/moonlight-repo.sh
   else
-    sh /tmp/moonlight-repo.sh
+    bash /tmp/moonlight-repo.sh
   fi
   apt-get update
   apt-get install -y moonlight-qt

@@ -205,9 +205,10 @@ device, disables SDDM/LightDM/GDM, and changes the default boot target.
 
 Moonlight is installed automatically on supported ARM packages. On generic
 amd64 it remains unavailable unless an administrator has already installed an
-official `moonlight-qt` or `moonlight` executable. Use `--moonlight yes` to
-require installation and fail closed, or `--moonlight no` when that client will
-not use Moonlight. Other protocols are unaffected.
+official `moonlight-qt` or `moonlight` executable. Ubuntu 26.04 must use
+`--moonlight no` because upstream does not publish a Resolute APT package;
+other protocols are unaffected. On a supported repository target,
+`--moonlight yes` requires installation and fails closed.
 
 Do not reboot if provisioning reports an error. A successful run ends with:
 

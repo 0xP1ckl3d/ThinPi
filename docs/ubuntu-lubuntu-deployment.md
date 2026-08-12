@@ -282,8 +282,10 @@ sudo sh /tmp/thinpi/deploy-client/provision.sh \
   --moonlight no
 ```
 
-Use `--moonlight yes` only when this VM needs Moonlight and its GPU/driver is
-ready. RDP, VNC, and locked SSH do not require Moonlight. Success ends with:
+Moonlight's upstream APT repository does not currently publish Ubuntu 26.04
+packages, so keep `--moonlight no` on Lubuntu 26.04. RDP, VNC, and locked SSH
+do not require Moonlight. A separately installed native Moonlight executable
+will still be detected by ThinPi. Success ends with:
 
 ```text
 Provisioning complete for generic/amd64 on ubuntu 26.04. Reboot to start the ThinPi kiosk.
