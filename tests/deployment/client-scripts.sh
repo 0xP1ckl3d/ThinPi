@@ -32,6 +32,7 @@ grep -F 'URLAllowlist:[$controller]' "$ROOT/deploy/client/browser-policy.sh" >/d
 ! grep -F '/*' "$ROOT/deploy/client/browser-policy.sh" >/dev/null
 grep -F '/home/thinpi/.local/share/pki/nssdb' "$ROOT/deploy/client/browser-policy.sh" >/dev/null
 grep -F 'certutil -A' "$ROOT/deploy/client/browser-policy.sh" >/dev/null
+grep -F 'CA_IMPORT_FILE=$(mktemp)' "$ROOT/deploy/client/browser-policy.sh" >/dev/null
 grep -F "CONTROLLER_URL=\$(sudo sed" "$ROOT/deploy/client/stage.sh" >/dev/null
 grep -F 'xhost +SI:localuser:thinpi' "$ROOT/deploy/client/xinitrc" >/dev/null
 grep -F 'TTYPath=/dev/tty2' "$ROOT/deploy/client/thinpi-maintenance@.service" >/dev/null

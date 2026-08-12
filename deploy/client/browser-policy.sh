@@ -42,7 +42,10 @@ if [ -r "$CA_FILE" ]; then
   if [ ! -f "$NSS_DIR/cert9.db" ]; then
     runuser -u thinpi -- certutil -N --empty-password -d "sql:$NSS_DIR"
   fi
+  CA_IMPORT_FILE=$(mktemp)
+  trap 'rm -f "$POLICY_FILE" "$CA_IMPORT_FILE"' EXIT HUP INT TERM
+  install -o thinpi -g thinpi -m 0400 "$CA_FILE" "$CA_IMPORT_FILE"
   runuser -u thinpi -- certutil -D -d "sql:$NSS_DIR" -n "ThinPi Controller CA" >/dev/null 2>&1 || true
-  runuser -u thinpi -- certutil -A -d "sql:$NSS_DIR" -t "C,," -n "ThinPi Controller CA" -i "$CA_FILE"
+  runuser -u thinpi -- certutil -A -d "sql:$NSS_DIR" -t "C,," -n "ThinPi Controller CA" -i "$CA_IMPORT_FILE"
   runuser -u thinpi -- certutil -L -d "sql:$NSS_DIR" -n "ThinPi Controller CA" >/dev/null
 fi
