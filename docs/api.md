@@ -11,8 +11,10 @@ state changes.
 | GET | `/admin/login` | optional browser session | Login page; redirects authenticated admins |
 | GET | `/admin` | administrator browser session | Admin console; redirects missing/expired sessions |
 | POST | `/api/v1/auth/login` | none | Username/password login |
+| GET | `/api/v1/login-users` | none | Up to six most recently used enabled sign-in cards |
 | POST | `/api/v1/auth/logout` | user | Revoke current session |
 | GET | `/api/v1/me` | user | Current user |
+| PUT | `/api/v1/me` | user | Change own username, display name, or password after current-password verification |
 | POST | `/api/v1/admin-handoff` | administrator | Create a 45-second, one-time browser handoff |
 | POST | `/api/v1/maintenance` | administrator | Create one-use, device-bound local maintenance ticket |
 | GET | `/admin/handoff?code=…` | one-time handoff | Redeem handoff into an admin cookie and redirect |
@@ -60,4 +62,6 @@ the in-memory launcher session.
 Each permission can select a credential override. A launch resolves the direct
 user permission first, then an applicable group permission, then the connection
 default. Policy records control allowed weekdays, local-time windows, daily
-minutes, per-session minutes, and timezone.
+minutes, per-session minutes, inactivity logout minutes, and timezone. The
+launcher pauses inactivity logout and renews the controller session while a
+native remote session is active.

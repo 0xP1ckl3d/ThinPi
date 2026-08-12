@@ -406,6 +406,25 @@ func TestAdministratorCRUD(t *testing.T) {
 	}
 }
 
+func TestLoginChoicesAndSelfServiceProfile(t *testing.T) {
+	server, _ := testHTTP(t)
+	client := server.Client()
+	status, choices := request(t, client, "GET", server.URL+"/api/v1/login-users", "", nil)
+	if status != http.StatusOK || len(choices["items"].([]any)) == 0 {
+		t.Fatalf("login choices status=%d %#v", status, choices)
+	}
+	_, login := request(t, client, "POST", server.URL+"/api/v1/auth/login", "", map[string]string{"username": "daughter", "password": "thinpi-dev"})
+	token := login["token"].(string)
+	status, profile := request(t, client, "PUT", server.URL+"/api/v1/me", token, map[string]string{"username": "daughter-2", "display_name": "Daughter Two", "current_password": "thinpi-dev", "new_password": "new-password"})
+	if status != http.StatusOK {
+		t.Fatalf("profile update status=%d %#v", status, profile)
+	}
+	status, _ = request(t, client, "POST", server.URL+"/api/v1/auth/login", "", map[string]string{"username": "daughter-2", "password": "new-password"})
+	if status != http.StatusOK {
+		t.Fatalf("updated profile credentials were rejected: %d", status)
+	}
+}
+
 func TestAdminJavaScriptDoesNotPassMapIndexToFetch(t *testing.T) {
 	server, _ := testHTTP(t)
 	res, err := server.Client().Get(server.URL + "/static/admin-v2.js")

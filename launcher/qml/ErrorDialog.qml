@@ -19,7 +19,7 @@ Dialog {
     contentItem: ColumnLayout {
         spacing: 14
         Label {
-            text: "Connection failed"
+            text: "Unable to complete request"
             color: "#f4f8ff"
             font.pixelSize: 24
             font.weight: Font.DemiBold
@@ -31,9 +31,10 @@ Dialog {
             font.pixelSize: 16
             wrapMode: Text.Wrap
         }
-        Button {
+        ThinButton {
             Layout.alignment: Qt.AlignRight
             text: "Return to ThinPi"
+            variant: "primary"
             onClicked: dialog.close()
         }
     }

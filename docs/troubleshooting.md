@@ -168,8 +168,8 @@ ThinPi-managed file uses `allowed_users=anybody` because the kiosk starts from
 a systemd/PAM session rather than an interactive getty. This does not provide
 a login shell or sudo access to `thinpi`; the nologin account, masked getties,
 Xorg escape-key restrictions, and systemd service boundary remain in force.
-Pull the current repository and rerun `scripts/deploy-client.sh` to install the
-managed policy.
+Pull the current repository and rerun `scripts/deploy-client.sh` to replace stale
+ThinPi Chromium URL policy with the path-specific admin policy.
 
 ### Launcher cannot reach controller but agent can
 

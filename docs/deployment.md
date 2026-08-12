@@ -556,8 +556,8 @@ The provisioner will:
 - mask local getty login screens;
 - disable root/forwarding/X11 access to the Pi's SSH server while preserving
   its existing password-authentication setting;
-- harden the managed admin browser by disabling downloads, developer tools,
-  extensions, guest/incognito mode, sync, and password storage;
+- install path-specific Chromium policy and launch administration only after a
+  controller-authenticated administrator handoff, using a throwaway profile;
 - configure `piadmin` as the one allowed maintenance console account;
 - set `thinpi.target` as the default boot target.
 
@@ -613,7 +613,9 @@ Open the controller admin panel. Work in this exact order:
 5. Assign access from either side: select **Assign connections** on a Person or
    Group, or **Assign access** on a Connection. The form opens with that item
    preselected; choose the other side and an optional credential override.
-6. **Restrictions** — set days, hours, daily limit, session limit and timezone.
+6. **Restrictions** — set days, hours, daily limit, session limit, inactivity
+   logout and timezone. Active remote sessions keep the ThinPi/controller sign-in
+   alive; the inactivity timer restarts when the user returns to the launcher.
 7. **Devices** — confirm the VM, mini PC, generic device, or Pi has a recent heartbeat.
 
 For RDP, leave **RDP server certificate** at **Trust on first connection, then
@@ -709,9 +711,8 @@ Test these physically before deployment sign-off:
 - leaving maintenance with `exit` returns to the signed-out launcher;
 - remote SSH exits back to the launcher and cannot open a second/local tab;
 - the SSH remote host-key mismatch fails closed;
-- the managed admin browser opens only after an administrator handoff, displays
-  normal browser controls so it can be closed, and cannot download files, open
-  developer tools, use guest/incognito mode, or access file-selection dialogs;
+- the admin browser opens only after an administrator handoff, displays normal
+  controls, and its **Return to ThinPi** action signs out and closes it;
 - an expired launcher/controller session returns to login;
 - the `thinpi` account has `nologin`, no sudo membership and no writable system
   paths;

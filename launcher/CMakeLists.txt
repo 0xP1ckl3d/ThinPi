@@ -25,6 +25,9 @@ qt_add_qml_module(thinpi-launcher
         qml/ConnectionTile.qml
         qml/ErrorDialog.qml
         qml/SessionOverlay.qml
+        qml/ThinButton.qml
+        qml/ThinTextField.qml
+        qml/PasswordField.qml
     RESOURCES assets/thinpi.svg
 )
 

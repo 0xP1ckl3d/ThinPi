@@ -36,11 +36,9 @@
 - Client provisioning preserves the host's existing administrator SSH
   password-authentication setting. Root login and forwarding remain disabled;
   key-only SSH is available only through `--disable-ssh-passwords`.
-- The managed native browser runs only after an administrator handoff, maximized
+- The native admin browser runs only after an administrator handoff, maximized
   with a throwaway profile and visible controls so the administrator can close it.
-  Managed policy disables developer tools, downloads, extensions, guest/incognito,
-  sync, password storage, printing, and file-selection dialogs. Browser navigation
-  is not treated as a security boundary: anyone authorized to open this browser is
+  Browser navigation is not treated as a security boundary: anyone authorized to open it is
   already a ThinPi administrator with access to the separately audited local
   maintenance path.
   Its **Return to ThinPi** control signs out and closes that browser process.

@@ -132,6 +132,9 @@ func (PlatformRunner) Run(ctx context.Context, c Command) error {
 		} else {
 			diagnostic = err.Error() + ": " + diagnostic
 		}
+		if clientExitedNormally(diagnostic) {
+			return nil
+		}
 		return classifyClientFailure(diagnostic)
 	}
 	return err
@@ -181,6 +184,13 @@ func redactClientOutput(output string, command Command) string {
 		return -1
 	}, output)
 	return strings.TrimSpace(output)
+}
+
+func clientExitedNormally(output string) bool {
+	upper := strings.ToUpper(output)
+	return strings.Contains(upper, "ERRINFO_LOGOFF_BY_USER") ||
+		strings.Contains(upper, "ERRINFO_RPC_INITIATED_LOGOFF") ||
+		strings.Contains(upper, "ERRINFO_RPC_INITIATED_DISCONNECT")
 }
 
 func classifyClientFailure(output string) error {

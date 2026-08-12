@@ -21,3 +21,10 @@ func TestClassifyClientFailure(t *testing.T) {
 		}
 	}
 }
+
+func TestUserInitiatedRDPLogoffIsSuccessful(t *testing.T) {
+	output := "certificate mismatch warning from connection startup\nERRINFO_LOGOFF_BY_USER (0x0000000C): The disconnection was initiated by the user logging off"
+	if !clientExitedNormally(output) {
+		t.Fatal("user-initiated RDP logoff was classified as a client failure")
+	}
+}

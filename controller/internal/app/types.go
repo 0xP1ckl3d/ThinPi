@@ -10,6 +10,11 @@ type User struct {
 	Enabled     bool   `json:"enabled"`
 }
 
+type LoginUser struct {
+	Username    string `json:"username"`
+	DisplayName string `json:"display_name"`
+}
+
 type Connection struct {
 	ID             int64           `json:"id"`
 	Name           string          `json:"name"`
@@ -59,6 +64,7 @@ type AccessPolicy struct {
 	AccessEndMinute   int    `json:"access_end_minute"`
 	DailyLimitMinutes int    `json:"daily_limit_minutes"`
 	MaxSessionMinutes int    `json:"max_session_minutes"`
+	IdleLogoutMinutes int    `json:"idle_logout_minutes"`
 }
 
 type PolicyStatus struct {
@@ -69,4 +75,5 @@ type PolicyStatus struct {
 	DailyLimitMinutes   int    `json:"daily_limit_minutes"`
 	MaxSessionMinutes   int    `json:"max_session_minutes"`
 	EffectiveMaxSeconds int    `json:"effective_max_seconds"`
+	IdleLogoutMinutes   int    `json:"idle_logout_minutes"`
 }

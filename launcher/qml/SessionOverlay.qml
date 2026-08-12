@@ -8,7 +8,7 @@ Rectangle {
         BusyIndicator { running: true; Layout.alignment: Qt.AlignHCenter; implicitWidth: 64; implicitHeight: 64 }
         Label { text: backend.sessionMessage; color: "white"; font.pixelSize: 28; Layout.alignment: Qt.AlignHCenter }
         Label { text: "The dashboard will return when the remote session ends."; color: "#9fb0c8"; font.pixelSize: 16; Layout.alignment: Qt.AlignHCenter }
-        Button { text: "End session"; Layout.alignment: Qt.AlignHCenter; onClicked: backend.endSession() }
+        ThinButton { text: "End session"; variant: "danger"; Layout.alignment: Qt.AlignHCenter; onClicked: backend.endSession() }
     }
     Rectangle { visible: backend.devMode && !backend.busy; anchors.fill: parent; color: "#18324b"
         Rectangle { anchors.fill: parent; gradient: Gradient { GradientStop { position: 0; color: "#174862" } GradientStop { position: 1; color: "#14243d" } } }
@@ -26,6 +26,6 @@ Rectangle {
                 Rectangle { Layout.fillWidth: true; Layout.fillHeight: true; radius: 8; color: "#e7edf2"; ColumnLayout { anchors.centerIn: parent; spacing: 8; Label { text: "This safe local desktop proves login, permissions, credential resolution, ticket redemption and session lifecycle."; color: "#344a5f"; wrapMode: Text.Wrap; horizontalAlignment: Text.AlignHCenter; Layout.maximumWidth: 520 } Label { text: "No external computer is contacted in demo mode."; color: "#6c7f91"; font.pixelSize: 12; Layout.alignment: Qt.AlignHCenter } } }
             }
         }
-        Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 54; color: "#091421e8"; Label { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; anchors.leftMargin: 18; text: "◉  Applications"; color: "white"; font.bold: true } Label { anchors.centerIn: parent; text: "DEMO SESSION"; color: "#68e0c5"; font.bold: true } Button { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; anchors.rightMargin: 12; text: "End session"; onClicked: backend.endSession() } }
+        Rectangle { anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 58; color: "#091421e8"; Label { anchors.left: parent.left; anchors.verticalCenter: parent.verticalCenter; anchors.leftMargin: 18; text: "◉  Applications"; color: "white"; font.bold: true } Label { anchors.centerIn: parent; text: "DEMO SESSION"; color: "#68e0c5"; font.bold: true } ThinButton { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; anchors.rightMargin: 12; text: "End session"; variant: "danger"; onClicked: backend.endSession() } }
     }
 }

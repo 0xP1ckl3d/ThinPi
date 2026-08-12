@@ -58,6 +58,73 @@ func (s *Store) CreateUser(ctx context.Context, username, displayName, password 
 	return r.LastInsertId()
 }
 
+func (s *Store) LoginUsers(ctx context.Context) ([]LoginUser, bool, error) {
+	rows, err := s.DB.QueryContext(ctx, `SELECT username,display_name FROM users WHERE enabled=1 ORDER BY CASE WHEN last_login_at IS NULL THEN 1 ELSE 0 END,last_login_at DESC,display_name COLLATE NOCASE LIMIT 7`)
+	if err != nil {
+		return nil, false, err
+	}
+	defer rows.Close()
+	users := make([]LoginUser, 0, 6)
+	hasMore := false
+	for rows.Next() {
+		if len(users) == 6 {
+			hasMore = true
+			break
+		}
+		var user LoginUser
+		if err := rows.Scan(&user.Username, &user.DisplayName); err != nil {
+			return nil, false, err
+		}
+		users = append(users, user)
+	}
+	return users, hasMore, rows.Err()
+}
+
+func (s *Store) UpdateOwnProfile(ctx context.Context, userID, sessionID int64, username, displayName, currentPassword, newPassword string) (User, error) {
+	username = strings.TrimSpace(strings.ToLower(username))
+	displayName = strings.TrimSpace(displayName)
+	if !identifierPattern.MatchString(username) || len(username) > 64 || displayName == "" || len(displayName) > 128 || strings.ContainsAny(displayName, "\r\n\x00") || currentPassword == "" {
+		return User{}, errors.New("invalid profile")
+	}
+	var currentHash string
+	var user User
+	if err := s.DB.QueryRowContext(ctx, `SELECT id,username,display_name,password_hash,is_admin,enabled FROM users WHERE id=?`, userID).Scan(&user.ID, &user.Username, &user.DisplayName, &currentHash, &user.IsAdmin, &user.Enabled); err != nil {
+		return User{}, err
+	}
+	if !security.VerifyPassword(currentHash, currentPassword) {
+		return User{}, ErrUnauthorised
+	}
+	nextHash := currentHash
+	if newPassword != "" {
+		var err error
+		nextHash, err = security.HashPassword(newPassword)
+		if err != nil {
+			return User{}, err
+		}
+	}
+	now := stamp(s.Now())
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return User{}, err
+	}
+	defer tx.Rollback()
+	if _, err = tx.ExecContext(ctx, `UPDATE users SET username=?,display_name=?,password_hash=?,updated_at=? WHERE id=?`, username, displayName, nextHash, now, userID); err != nil {
+		return User{}, err
+	}
+	if username != user.Username || newPassword != "" {
+		if _, err = tx.ExecContext(ctx, `UPDATE sessions SET revoked_at=? WHERE user_id=? AND id<>? AND revoked_at IS NULL`, now, userID, sessionID); err != nil {
+			return User{}, err
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		return User{}, err
+	}
+	user.Username = username
+	user.DisplayName = displayName
+	s.audit(ctx, &userID, nil, "profile_updated", nil, "self_service", "success", nil)
+	return user, nil
+}
+
 func (s *Store) Authenticate(ctx context.Context, username, password, source string) (string, string, User, error) {
 	now := s.Now()
 	key := strings.ToLower(strings.TrimSpace(username)) + "|" + source
@@ -90,7 +157,8 @@ func (s *Store) Authenticate(ctx context.Context, username, password, source str
 	if err != nil {
 		return "", "", User{}, err
 	}
-	_, err = s.DB.ExecContext(ctx, `INSERT INTO sessions(token_hash,csrf_hash,user_id,expires_at,last_seen_at,created_at) VALUES(?,?,?,?,?,?)`, security.TokenHash(token), security.TokenHash(csrf), u.ID, stamp(now.Add(s.SessionIdle)), stamp(now), stamp(now))
+	idle := s.UserIdleTimeout(ctx, u.ID)
+	_, err = s.DB.ExecContext(ctx, `INSERT INTO sessions(token_hash,csrf_hash,user_id,expires_at,last_seen_at,created_at) VALUES(?,?,?,?,?,?)`, security.TokenHash(token), security.TokenHash(csrf), u.ID, stamp(now.Add(idle)), stamp(now), stamp(now))
 	if err != nil {
 		return "", "", User{}, err
 	}
@@ -115,8 +183,18 @@ func (s *Store) Session(ctx context.Context, token string) (Session, error) {
 		return Session{}, ErrUnauthorised
 	}
 	now := s.Now()
-	_, _ = s.DB.ExecContext(ctx, `UPDATE sessions SET last_seen_at=?,expires_at=? WHERE id=?`, stamp(now), stamp(now.Add(s.SessionIdle)), sess.ID)
+	_, _ = s.DB.ExecContext(ctx, `UPDATE sessions SET last_seen_at=?,expires_at=? WHERE id=?`, stamp(now), stamp(now.Add(s.UserIdleTimeout(ctx, sess.User.ID))), sess.ID)
 	return sess, nil
+}
+
+func (s *Store) UserIdleTimeout(ctx context.Context, userID int64) time.Duration {
+	minutes := 30
+	if err := s.DB.QueryRowContext(ctx, `SELECT idle_logout_minutes FROM user_policies WHERE user_id=?`, userID).Scan(&minutes); err != nil || minutes < 1 || minutes > 1440 {
+		if fallback := int(s.SessionIdle / time.Minute); fallback >= 1 && fallback <= 1440 {
+			minutes = fallback
+		}
+	}
+	return time.Duration(minutes) * time.Minute
 }
 
 func (s *Store) Logout(ctx context.Context, sessionID, userID int64, source string) {
@@ -163,7 +241,8 @@ func (s *Store) RedeemAdminHandoff(ctx context.Context, token, source string) (s
 	var userID int64
 	var expires string
 	var redeemed sql.NullString
-	err = tx.QueryRowContext(ctx, `SELECT h.user_id,h.expires_at,h.redeemed_at FROM admin_handoffs h JOIN users u ON u.id=h.user_id WHERE h.token_hash=? AND u.is_admin=1 AND u.enabled=1`, security.TokenHash(token)).Scan(&userID, &expires, &redeemed)
+	var idleMinutes int
+	err = tx.QueryRowContext(ctx, `SELECT h.user_id,h.expires_at,h.redeemed_at,COALESCE(p.idle_logout_minutes,30) FROM admin_handoffs h JOIN users u ON u.id=h.user_id LEFT JOIN user_policies p ON p.user_id=u.id WHERE h.token_hash=? AND u.is_admin=1 AND u.enabled=1`, security.TokenHash(token)).Scan(&userID, &expires, &redeemed, &idleMinutes)
 	expiry, parseErr := time.Parse(time.RFC3339Nano, expires)
 	if err != nil || parseErr != nil || redeemed.Valid || !s.Now().Before(expiry) {
 		return "", ErrUnauthorised
@@ -177,7 +256,10 @@ func (s *Store) RedeemAdminHandoff(ctx context.Context, token, source string) (s
 	if changed != 1 {
 		return "", ErrUnauthorised
 	}
-	_, err = tx.ExecContext(ctx, `INSERT INTO sessions(token_hash,csrf_hash,user_id,expires_at,last_seen_at,created_at) VALUES(?,?,?,?,?,?)`, security.TokenHash(sessionToken), security.TokenHash(csrf), userID, stamp(now.Add(s.SessionIdle)), stamp(now), stamp(now))
+	if idleMinutes < 1 || idleMinutes > 1440 {
+		idleMinutes = 30
+	}
+	_, err = tx.ExecContext(ctx, `INSERT INTO sessions(token_hash,csrf_hash,user_id,expires_at,last_seen_at,created_at) VALUES(?,?,?,?,?,?)`, security.TokenHash(sessionToken), security.TokenHash(csrf), userID, stamp(now.Add(time.Duration(idleMinutes)*time.Minute)), stamp(now), stamp(now))
 	if err != nil {
 		return "", err
 	}
@@ -212,8 +294,8 @@ func (s *Store) CanLaunch(ctx context.Context, userID, connectionID int64) bool 
 }
 
 func (s *Store) AccessPolicy(ctx context.Context, userID int64) (AccessPolicy, error) {
-	p := AccessPolicy{UserID: userID, Timezone: "Australia/Sydney", AllowedDaysMask: 127, AccessStartMinute: 0, AccessEndMinute: 1440}
-	err := s.DB.QueryRowContext(ctx, `SELECT timezone,allowed_days_mask,access_start_minute,access_end_minute,daily_limit_minutes,max_session_minutes FROM user_policies WHERE user_id=?`, userID).Scan(&p.Timezone, &p.AllowedDaysMask, &p.AccessStartMinute, &p.AccessEndMinute, &p.DailyLimitMinutes, &p.MaxSessionMinutes)
+	p := AccessPolicy{UserID: userID, Timezone: "Australia/Sydney", AllowedDaysMask: 127, AccessStartMinute: 0, AccessEndMinute: 1440, IdleLogoutMinutes: 30}
+	err := s.DB.QueryRowContext(ctx, `SELECT timezone,allowed_days_mask,access_start_minute,access_end_minute,daily_limit_minutes,max_session_minutes,idle_logout_minutes FROM user_policies WHERE user_id=?`, userID).Scan(&p.Timezone, &p.AllowedDaysMask, &p.AccessStartMinute, &p.AccessEndMinute, &p.DailyLimitMinutes, &p.MaxSessionMinutes, &p.IdleLogoutMinutes)
 	if errors.Is(err, sql.ErrNoRows) {
 		return p, nil
 	}
@@ -231,7 +313,7 @@ func (s *Store) PolicyStatus(ctx context.Context, userID int64) (PolicyStatus, e
 	}
 	now := s.Now()
 	local := now.In(loc)
-	status := PolicyStatus{Allowed: true, Timezone: p.Timezone, DailyLimitMinutes: p.DailyLimitMinutes, MaxSessionMinutes: p.MaxSessionMinutes}
+	status := PolicyStatus{Allowed: true, Timezone: p.Timezone, DailyLimitMinutes: p.DailyLimitMinutes, MaxSessionMinutes: p.MaxSessionMinutes, IdleLogoutMinutes: p.IdleLogoutMinutes}
 	dayBit := 1 << ((int(local.Weekday()) + 6) % 7)
 	if p.AllowedDaysMask&dayBit == 0 {
 		status.Allowed = false

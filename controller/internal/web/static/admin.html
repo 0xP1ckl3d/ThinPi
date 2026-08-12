@@ -6,6 +6,7 @@
   <meta name="csrf" content="{{.CSRF}}">
   <title>ThinPi Console</title>
   <link rel="stylesheet" href="/static/admin-v2.css">
+  <link rel="stylesheet" href="/static/admin-password.css">
 </head>
 <body>
   <header class="topbar">
@@ -79,7 +80,7 @@
   </div>
 
   <dialog id="editor-dialog"><form id="editor-form"><div class="dialog-title"><div><p class="eyebrow">Edit settings</p><h2 id="editor-title"></h2></div><button type="button" class="icon-button" id="editor-close" aria-label="Close">×</button></div><p id="editor-message" class="muted"></p><div id="editor-fields" class="dialog-fields"></div><div class="dialog-actions"><button type="button" id="editor-cancel" class="quiet">Cancel</button><button type="submit" id="editor-submit" class="primary">Save changes</button></div></form></dialog>
-  <dialog id="policy-dialog"><form id="policy-form"><div class="dialog-title"><div><p class="eyebrow">Parental controls</p><h2 id="policy-title">Access policy</h2></div><button type="button" class="icon-button" data-policy-close aria-label="Close">×</button></div><div class="policy-form"><fieldset><legend>Allowed days</legend><div class="day-picker" id="policy-days"></div></fieldset><div class="form-grid"><label>Available from<input id="policy-start" type="time" required></label><label>Available until<input id="policy-end" type="time" required></label><label>Daily allowance (minutes)<input id="policy-daily" type="number" min="0" max="1440"><small>0 means unlimited</small></label><label>Maximum session (minutes)<input id="policy-session" type="number" min="0" max="720"><small>0 means unlimited</small></label><label class="wide">Timezone<input id="policy-timezone" value="Australia/Sydney" required></label></div></div><div class="dialog-actions"><button type="button" class="quiet" data-policy-close>Cancel</button><button class="primary">Save policy</button></div></form></dialog>
+  <dialog id="policy-dialog"><form id="policy-form"><div class="dialog-title"><div><p class="eyebrow">Parental controls</p><h2 id="policy-title">Access policy</h2></div><button type="button" class="icon-button" data-policy-close aria-label="Close">×</button></div><div class="policy-form"><fieldset><legend>Allowed days</legend><div class="day-picker" id="policy-days"></div></fieldset><div class="form-grid"><label>Available from<input id="policy-start" type="time" required></label><label>Available until<input id="policy-end" type="time" required></label><label>Daily allowance (minutes)<input id="policy-daily" type="number" min="0" max="1440"><small>0 means unlimited</small></label><label>Maximum session (minutes)<input id="policy-session" type="number" min="0" max="720"><small>0 means unlimited</small></label><label>Sign out after inactivity (minutes)<input id="policy-idle" type="number" min="1" max="1440" value="30" required><small>Remote sessions keep the sign-in active</small></label><label class="wide">Timezone<input id="policy-timezone" value="Australia/Sydney" required></label></div></div><div class="dialog-actions"><button type="button" class="quiet" data-policy-close>Cancel</button><button class="primary">Save policy</button></div></form></dialog>
   <script src="/static/admin-v2.js"></script>
 </body>
 </html>

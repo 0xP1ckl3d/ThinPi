@@ -61,8 +61,10 @@ func New(store *app.Store, logger *slog.Logger, dev bool, version string) *Serve
 	mux.HandleFunc("GET /{$}", s.root)
 	mux.HandleFunc("GET /healthz", s.health)
 	mux.HandleFunc("POST /api/v1/auth/login", s.login)
+	mux.HandleFunc("GET /api/v1/login-users", s.loginUsers)
 	mux.Handle("POST /api/v1/auth/logout", s.withSession(http.HandlerFunc(s.logout)))
 	mux.Handle("GET /api/v1/me", s.withSession(http.HandlerFunc(s.me)))
+	mux.Handle("PUT /api/v1/me", s.withSession(http.HandlerFunc(s.updateMe)))
 	mux.Handle("POST /api/v1/admin-handoff", s.withAdmin(http.HandlerFunc(s.createAdminHandoff)))
 	mux.Handle("POST /api/v1/maintenance", s.withAdmin(http.HandlerFunc(s.createMaintenanceTicket)))
 	mux.Handle("GET /api/v1/connections", s.withSession(http.HandlerFunc(s.connections)))
@@ -260,8 +262,17 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		s.error(w, r, 401, "INVALID_CREDENTIALS", "The username or password was incorrect.")
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: "thinpi_session", Value: token, Path: "/", HttpOnly: true, Secure: !s.Dev, SameSite: http.SameSiteStrictMode, MaxAge: int(s.Store.SessionIdle.Seconds())})
+	http.SetCookie(w, &http.Cookie{Name: "thinpi_session", Value: token, Path: "/", HttpOnly: true, Secure: !s.Dev, SameSite: http.SameSiteStrictMode, MaxAge: int(s.Store.UserIdleTimeout(r.Context(), u.ID).Seconds())})
 	writeJSON(w, 200, map[string]any{"token": token, "csrf_token": csrf, "user": u})
+}
+func (s *Server) loginUsers(w http.ResponseWriter, r *http.Request) {
+	users, hasMore, err := s.Store.LoginUsers(r.Context())
+	if err != nil {
+		s.error(w, r, 500, "INTERNAL_ERROR", "Unable to load sign-in choices.")
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, 200, map[string]any{"items": users, "has_more": hasMore})
 }
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	sess := r.Context().Value(sessionKey).(app.Session)
@@ -275,6 +286,29 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"user": r.Context().Value(sessionKey).(app.Session).User})
+}
+func (s *Server) updateMe(w http.ResponseWriter, r *http.Request) {
+	sess := r.Context().Value(sessionKey).(app.Session)
+	var q struct {
+		Username        string `json:"username"`
+		DisplayName     string `json:"display_name"`
+		CurrentPassword string `json:"current_password"`
+		NewPassword     string `json:"new_password"`
+	}
+	if decode(r, &q) != nil {
+		s.error(w, r, 400, "INVALID_REQUEST", "Invalid profile update.")
+		return
+	}
+	user, err := s.Store.UpdateOwnProfile(r.Context(), sess.User.ID, sess.ID, q.Username, q.DisplayName, q.CurrentPassword, q.NewPassword)
+	if errors.Is(err, app.ErrUnauthorised) {
+		s.error(w, r, 403, "INVALID_CURRENT_PASSWORD", "Your current password was incorrect.")
+		return
+	}
+	if err != nil {
+		s.error(w, r, 400, "INVALID_PROFILE", "The username may already be used, or the new password is shorter than 8 characters.")
+		return
+	}
+	writeJSON(w, 200, map[string]any{"user": user})
 }
 func (s *Server) createAdminHandoff(w http.ResponseWriter, r *http.Request) {
 	sess := r.Context().Value(sessionKey).(app.Session)
@@ -291,7 +325,7 @@ func (s *Server) redeemAdminHandoff(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/admin/login", http.StatusSeeOther)
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: "thinpi_session", Value: token, Path: "/", HttpOnly: true, Secure: !s.Dev, SameSite: http.SameSiteStrictMode, MaxAge: int(s.Store.SessionIdle.Seconds())})
+	http.SetCookie(w, &http.Cookie{Name: "thinpi_session", Value: token, Path: "/", HttpOnly: true, Secure: !s.Dev, SameSite: http.SameSiteStrictMode, MaxAge: int((24 * time.Hour).Seconds())})
 	http.Redirect(w, r, "/admin", http.StatusSeeOther)
 }
 func (s *Server) connections(w http.ResponseWriter, r *http.Request) {
@@ -451,7 +485,7 @@ func (s *Server) adminLogin(w http.ResponseWriter, r *http.Request) {
 		_ = loginTemplate.Execute(w, "The username or password was incorrect.")
 		return
 	}
-	http.SetCookie(w, &http.Cookie{Name: "thinpi_session", Value: token, Path: "/", HttpOnly: true, Secure: !s.Dev, SameSite: http.SameSiteStrictMode, MaxAge: int(s.Store.SessionIdle.Seconds())})
+	http.SetCookie(w, &http.Cookie{Name: "thinpi_session", Value: token, Path: "/", HttpOnly: true, Secure: !s.Dev, SameSite: http.SameSiteStrictMode, MaxAge: int(s.Store.UserIdleTimeout(r.Context(), u.ID).Seconds())})
 	http.Redirect(w, r, "/admin", 303)
 }
 
@@ -477,7 +511,7 @@ func (s *Server) adminList(w http.ResponseWriter, r *http.Request) {
 		"connections": `SELECT id,name,description,protocol,host,port,enabled,icon,sort_order,protocol_config_json,credential_id FROM connections ORDER BY sort_order,name`,
 		"credentials": `SELECT id,name,username,secret_type,created_at,updated_at FROM credentials ORDER BY name`,
 		"devices":     `SELECT id,name,device_identifier,enabled,last_seen_at,last_ip,client_versions_json,created_at FROM devices ORDER BY name`,
-		"policies":    `SELECT u.id AS user_id,u.username,u.display_name,COALESCE(p.timezone,'Australia/Sydney') AS timezone,COALESCE(p.allowed_days_mask,127) AS allowed_days_mask,COALESCE(p.access_start_minute,0) AS access_start_minute,COALESCE(p.access_end_minute,1440) AS access_end_minute,COALESCE(p.daily_limit_minutes,0) AS daily_limit_minutes,COALESCE(p.max_session_minutes,0) AS max_session_minutes FROM users u LEFT JOIN user_policies p ON p.user_id=u.id ORDER BY u.username`,
+		"policies":    `SELECT u.id AS user_id,u.username,u.display_name,COALESCE(p.timezone,'Australia/Sydney') AS timezone,COALESCE(p.allowed_days_mask,127) AS allowed_days_mask,COALESCE(p.access_start_minute,0) AS access_start_minute,COALESCE(p.access_end_minute,1440) AS access_end_minute,COALESCE(p.daily_limit_minutes,0) AS daily_limit_minutes,COALESCE(p.max_session_minutes,0) AS max_session_minutes,COALESCE(p.idle_logout_minutes,30) AS idle_logout_minutes FROM users u LEFT JOIN user_policies p ON p.user_id=u.id ORDER BY u.username`,
 		"permissions": `SELECT 'user' AS subject_type,u.id AS subject_id,u.display_name AS subject_name,c.id AS connection_id,c.name AS connection_name,p.can_launch,p.credential_id,cr.name AS credential_name FROM user_connection_permissions p JOIN users u ON u.id=p.user_id JOIN connections c ON c.id=p.connection_id LEFT JOIN credentials cr ON cr.id=p.credential_id UNION ALL SELECT 'group',g.id,g.name,c.id,c.name,p.can_launch,p.credential_id,cr.name FROM group_connection_permissions p JOIN groups g ON g.id=p.group_id JOIN connections c ON c.id=p.connection_id LEFT JOIN credentials cr ON cr.id=p.credential_id ORDER BY subject_type,subject_name,connection_name`,
 		"audit":       fmt.Sprintf(`SELECT id,timestamp,actor_user_id,device_id,event_type,connection_id,source_ip,result,metadata_json FROM audit_events ORDER BY timestamp DESC LIMIT %d`, limit),
 	}
@@ -752,12 +786,12 @@ func (s *Server) adminUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 	case "policies":
 		var q app.AccessPolicy
-		if decode(r, &q) != nil || q.UserID != id || q.AllowedDaysMask < 0 || q.AllowedDaysMask > 127 || q.AccessStartMinute < 0 || q.AccessStartMinute > 1439 || q.AccessEndMinute < 1 || q.AccessEndMinute > 1440 || q.DailyLimitMinutes < 0 || q.DailyLimitMinutes > 1440 || q.MaxSessionMinutes < 0 || q.MaxSessionMinutes > 720 {
+		if decode(r, &q) != nil || q.UserID != id || q.AllowedDaysMask < 0 || q.AllowedDaysMask > 127 || q.AccessStartMinute < 0 || q.AccessStartMinute > 1439 || q.AccessEndMinute < 1 || q.AccessEndMinute > 1440 || q.DailyLimitMinutes < 0 || q.DailyLimitMinutes > 1440 || q.MaxSessionMinutes < 0 || q.MaxSessionMinutes > 720 || q.IdleLogoutMinutes < 1 || q.IdleLogoutMinutes > 1440 {
 			err = errors.New("invalid")
 		} else if _, zoneErr := time.LoadLocation(q.Timezone); zoneErr != nil {
 			err = errors.New("invalid timezone")
 		} else {
-			_, err = s.Store.DB.ExecContext(r.Context(), `INSERT INTO user_policies(user_id,timezone,allowed_days_mask,access_start_minute,access_end_minute,daily_limit_minutes,max_session_minutes,updated_at) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET timezone=excluded.timezone,allowed_days_mask=excluded.allowed_days_mask,access_start_minute=excluded.access_start_minute,access_end_minute=excluded.access_end_minute,daily_limit_minutes=excluded.daily_limit_minutes,max_session_minutes=excluded.max_session_minutes,updated_at=excluded.updated_at`, id, q.Timezone, q.AllowedDaysMask, q.AccessStartMinute, q.AccessEndMinute, q.DailyLimitMinutes, q.MaxSessionMinutes, now)
+			_, err = s.Store.DB.ExecContext(r.Context(), `INSERT INTO user_policies(user_id,timezone,allowed_days_mask,access_start_minute,access_end_minute,daily_limit_minutes,max_session_minutes,idle_logout_minutes,updated_at) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET timezone=excluded.timezone,allowed_days_mask=excluded.allowed_days_mask,access_start_minute=excluded.access_start_minute,access_end_minute=excluded.access_end_minute,daily_limit_minutes=excluded.daily_limit_minutes,max_session_minutes=excluded.max_session_minutes,idle_logout_minutes=excluded.idle_logout_minutes,updated_at=excluded.updated_at`, id, q.Timezone, q.AllowedDaysMask, q.AccessStartMinute, q.AccessEndMinute, q.DailyLimitMinutes, q.MaxSessionMinutes, q.IdleLogoutMinutes, now)
 			if err == nil {
 				_, _ = s.Store.DB.ExecContext(r.Context(), `DELETE FROM launch_tickets WHERE user_id=? AND redeemed_at IS NULL`, id)
 			}

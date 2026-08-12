@@ -42,13 +42,15 @@ document.addEventListener('click', event => {
 function badge(text, tone = '') { return `<span class="badge ${tone}">${esc(text)}</span>`; }
 function credentialName(id) { return state.credentials.find(item => item.id === id)?.name || 'No stored credential'; }
 function protocolLabel(protocol) { return ({rdp:'RDP',vnc:'Linux · VNC',ssh:'Linux · SSH',moonlight:'Moonlight',mock:'Demo'}[protocol] || protocol.toUpperCase()); }
-function policyFor(userID) { return state.policies.find(policy => policy.user_id === userID) || {allowed_days_mask:127,access_start_minute:0,access_end_minute:1440,daily_limit_minutes:0,max_session_minutes:0,timezone:'Australia/Sydney'}; }
+function connectionPayload(connection, overrides={}) { return {name:connection.name,description:connection.description||'',protocol:connection.protocol,host:connection.host,port:Number(connection.port),enabled:!!connection.enabled,icon:connection.icon||'',sort_order:Number(connection.sort_order||0),protocol_config:JSON.parse(connection.protocol_config_json||'{}'),credential_id:connection.credential_id||null,...overrides}; }
+function addPasswordToggle(input) { if(input.dataset.visibilityToggle)return;input.dataset.visibilityToggle='1';const wrapper=document.createElement('span'),button=document.createElement('button');wrapper.className='password-control';button.type='button';button.className='password-toggle';button.textContent='👁';button.setAttribute('aria-label','Show password');input.before(wrapper);wrapper.append(input,button);button.onclick=()=>{const show=input.type==='password';input.type=show?'text':'password';button.setAttribute('aria-label',show?'Hide password':'Show password');button.classList.toggle('revealed',show);input.focus();}; }
+function policyFor(userID) { return state.policies.find(policy => policy.user_id === userID) || {allowed_days_mask:127,access_start_minute:0,access_end_minute:1440,daily_limit_minutes:0,max_session_minutes:0,idle_logout_minutes:30,timezone:'Australia/Sydney'}; }
 function timeLabel(minutes) { if (minutes === 1440) return '24:00'; return `${String(Math.floor(minutes / 60)).padStart(2,'0')}:${String(minutes % 60).padStart(2,'0')}`; }
 function policySummary(policy) {
   const schedule = policy.allowed_days_mask === 127 && policy.access_start_minute === 0 && policy.access_end_minute === 1440 ? 'Any time' : `${timeLabel(policy.access_start_minute)}–${timeLabel(policy.access_end_minute)}`;
   const allowance = policy.daily_limit_minutes ? `${policy.daily_limit_minutes} min/day` : 'No daily cap';
   const session = policy.max_session_minutes ? `${policy.max_session_minutes} min/session` : 'No session cap';
-  return `${schedule} · ${allowance} · ${session}`;
+  return `${schedule} · ${allowance} · ${session} · ${policy.idle_logout_minutes || 30} min idle logout`;
 }
 
 function renderDashboard() {
@@ -180,7 +182,7 @@ function ask(title, fields = [], confirmLabel = 'Save changes', message = '') {
       else { input.type=field.type||'text'; input.value=field.value??''; }
       input.required=!!field.required;
       if(field.min!==undefined)input.min=field.min;if(field.max!==undefined)input.max=field.max;if(field.minLength!==undefined)input.minLength=field.minLength;
-      if(field.type==='checkbox')label.append(input,document.createTextNode(field.label));else label.append(document.createTextNode(field.label),input); container.append(label);
+      if(field.type==='checkbox')label.append(input,document.createTextNode(field.label));else label.append(document.createTextNode(field.label),input); container.append(label); if(input.type==='password')addPasswordToggle(input);
     }
     const syncConditionalFields=()=>{for(const field of fields){if(!field.showWhen)continue;const current=form.elements[field.showWhen.field]?.value;form.elements[field.name]?.closest('label')?.toggleAttribute('hidden',!field.showWhen.values.includes(current));}};
     for(const field of fields.filter(item=>item.showWhen))form.elements[field.showWhen.field]?.addEventListener('change',syncConditionalFields);
@@ -209,13 +211,13 @@ async function handleAction(button) {
   if(action==='edit-user') { const data=await ask('Edit person',[{name:'display_name',label:'Display name',value:user.display_name,required:true},{name:'password',label:'New password (leave blank to keep current)',type:'password',minLength:8},{name:'is_admin',label:'Administrator',type:'checkbox',value:user.is_admin},{name:'enabled',label:'Active account',type:'checkbox',value:user.enabled}]); if(data)return update('/users/'+id,data); }
   if(action==='policy') return openPolicy(id);
   if(action==='edit-group') { const data=await ask('Edit group',[{name:'name',label:'Group name',value:group.name,required:true},{name:'description',label:'Description',value:group.description||'',multiline:true}]); if(data)return update('/groups/'+id,data); }
-  if(action==='toggle-connection') return update('/connections/'+id,{...connection,protocol_config:JSON.parse(connection.protocol_config_json||'{}'),enabled:!connection.enabled},connection.enabled?'Connection disabled':'Connection enabled');
+  if(action==='toggle-connection') return update('/connections/'+id,connectionPayload(connection,{enabled:!connection.enabled}),connection.enabled?'Connection disabled':'Connection enabled');
   if(action==='edit-connection') {
     const protocols=[{label:'Windows / Linux RDP',value:'rdp'},{label:'Linux desktop (VNC)',value:'vnc'},{label:'Linux command line (locked SSH)',value:'ssh'},{label:'Moonlight / Sunshine',value:'moonlight'}];
     if(state.dashboard.dev_mode)protocols.push({label:'Demo session',value:'mock'});
     const config=JSON.parse(connection.protocol_config_json||'{}');
     const data=await ask('Configure connection',[{name:'name',label:'Name',value:connection.name,required:true},{name:'description',label:'Description',value:connection.description||''},{name:'protocol',label:'Type',value:connection.protocol,options:protocols},{name:'host',label:'Host',value:connection.host,required:true},{name:'port',label:'Port',type:'number',value:connection.port,min:1,max:65535,required:true},{name:'credential_id',label:'Default credential',value:String(connection.credential_id||''),options:credentialOptions(connection.credential_id,connection.protocol)},{name:'enabled',label:'Available',type:'checkbox',value:connection.enabled},{name:'rdp_certificate_mode',label:'RDP certificate validation',value:config.certificate_mode||'tofu',options:[{label:'Trust on first connection, then pin',value:'tofu'},{label:'Require already trusted certificate',value:'deny'},{label:'Ignore validation (unsafe)',value:'ignore'}],showWhen:{field:'protocol',values:['rdp']}},{name:'ssh_host_key',label:'Verified SSH server host public key',value:config.host_key||'',multiline:true,showWhen:{field:'protocol',values:['ssh']}},{name:'ssh_terminal_title',label:'Terminal title',value:config.terminal_title||'Secure shell',showWhen:{field:'protocol',values:['ssh']}},{name:'protocol_config',label:'Advanced settings (JSON)',value:connection.protocol_config_json||'{}',multiline:true,showWhen:{field:'protocol',values:['rdp','vnc','moonlight','mock']}}]);
-    if(data){const parsed=JSON.parse(data.protocol_config),protocolConfig=data.protocol==='ssh'?{host_key:data.ssh_host_key.trim(),terminal_title:data.ssh_terminal_title.trim()||'Secure shell'}:data.protocol==='rdp'?{...parsed,certificate_mode:data.rdp_certificate_mode}:parsed;delete data.ssh_host_key;delete data.ssh_terminal_title;delete data.rdp_certificate_mode;return update('/connections/'+id,{...connection,...data,port:Number(data.port),credential_id:data.credential_id?Number(data.credential_id):null,protocol_config:protocolConfig,enabled:data.enabled});}
+    if(data){const parsed=JSON.parse(data.protocol_config),protocolConfig=data.protocol==='ssh'?{host_key:data.ssh_host_key.trim(),terminal_title:data.ssh_terminal_title.trim()||'Secure shell'}:data.protocol==='rdp'?{...parsed,certificate_mode:data.rdp_certificate_mode}:parsed;return update('/connections/'+id,connectionPayload(connection,{name:data.name,description:data.description,protocol:data.protocol,host:data.host,port:Number(data.port),credential_id:data.credential_id?Number(data.credential_id):null,protocol_config:protocolConfig,enabled:data.enabled}));}
   }
   if(action==='replace-credential') { const isKey=credential.secret_type==='ssh_private_key';const data=await ask('Replace credential',[{name:'username',label:'Remote username (blank preserves current)',value:credential.username||''},{name:'secret',label:isKey?'New SSH private key':'New password',type:isKey?'text':'password',multiline:isKey,required:true}]); if(data)return update('/credentials/'+id,data,'Credential replaced'); }
   if(action==='rename-device') { const data=await ask('Rename device',[{name:'name',label:'Device name',value:device.name,required:true}]); if(data)return update('/devices/'+id,{name:data.name}); }
@@ -230,12 +232,12 @@ function openPolicy(userID) {
   policyUserID=userID; const user=state.users.find(x=>x.id===userID), policy=policyFor(userID);
   $('#policy-title').textContent=`${user.display_name}'s access policy`;
   $('#policy-days').innerHTML=dayNames.map((day,index)=>`<label><input type="checkbox" value="${1<<index}" ${(policy.allowed_days_mask&(1<<index))?'checked':''}>${day}</label>`).join('');
-  $('#policy-start').value=timeLabel(policy.access_start_minute); $('#policy-end').value=policy.access_end_minute===1440?'23:59':timeLabel(policy.access_end_minute); $('#policy-daily').value=policy.daily_limit_minutes; $('#policy-session').value=policy.max_session_minutes; $('#policy-timezone').value=policy.timezone;
+  $('#policy-start').value=timeLabel(policy.access_start_minute); $('#policy-end').value=policy.access_end_minute===1440?'23:59':timeLabel(policy.access_end_minute); $('#policy-daily').value=policy.daily_limit_minutes; $('#policy-session').value=policy.max_session_minutes; $('#policy-idle').value=policy.idle_logout_minutes||30; $('#policy-timezone').value=policy.timezone;
   $('#policy-dialog').showModal();
 }
 function closePolicy(){ $('#policy-dialog').close(); }
 document.querySelectorAll('[data-policy-close]').forEach(button=>button.onclick=closePolicy);
-$('#policy-form').onsubmit=async event=>{event.preventDefault();let mask=0;document.querySelectorAll('#policy-days input:checked').forEach(input=>mask|=Number(input.value));const parseTime=value=>{const [h,m]=value.split(':').map(Number);return h*60+m};const end=$('#policy-end').value;const body={user_id:policyUserID,timezone:$('#policy-timezone').value,allowed_days_mask:mask,access_start_minute:parseTime($('#policy-start').value),access_end_minute:end==='23:59'?1440:parseTime(end),daily_limit_minutes:Number($('#policy-daily').value||0),max_session_minutes:Number($('#policy-session').value||0)};closePolicy();await update('/policies/'+policyUserID,body,'Access policy saved');};
+$('#policy-form').onsubmit=async event=>{event.preventDefault();let mask=0;document.querySelectorAll('#policy-days input:checked').forEach(input=>mask|=Number(input.value));const parseTime=value=>{const [h,m]=value.split(':').map(Number);return h*60+m};const end=$('#policy-end').value;const body={user_id:policyUserID,timezone:$('#policy-timezone').value,allowed_days_mask:mask,access_start_minute:parseTime($('#policy-start').value),access_end_minute:end==='23:59'?1440:parseTime(end),daily_limit_minutes:Number($('#policy-daily').value||0),max_session_minutes:Number($('#policy-session').value||0),idle_logout_minutes:Number($('#policy-idle').value||30)};closePolicy();await update('/policies/'+policyUserID,body,'Access policy saved');};
 
 $('#audit-filter').oninput=event=>{const query=event.target.value.trim().toLowerCase();document.querySelectorAll('#audit-body tr').forEach(row=>row.hidden=!!query&&!row.dataset.search.includes(query));};
 
@@ -254,6 +256,7 @@ $('#return-client').onclick=async event=>{
   },500);
 };
 
+document.querySelectorAll('input[type=password]').forEach(addPasswordToggle);
 syncConnectionFields();
 syncCredentialFields();
 refresh();

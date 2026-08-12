@@ -27,9 +27,9 @@ Raspberry Pi OS based on Debian 13 on `arm64`, and Ubuntu/Lubuntu 24.04 or
 
 On Ubuntu/Lubuntu, the installer does not use Ubuntu's transitional Chromium
 Snap. It installs native Google Chrome from Google's signed Linux repository,
-sets mandatory machine policy under `/etc/opt/chrome/policies/managed`, and
-gives the launcher the fixed executable path. This preserves the locked admin
-browser when the kiosk runs under the non-login `thinpi` identity.
+applies path-specific controller policy, and gives the launcher the fixed
+executable path. The admin browser uses a new throwaway profile for every
+controller-authenticated administrator handoff.
 
 For a VM, configure a visible virtual display adapter such as VirtIO-GPU, QXL,
 or the hypervisor default. Do not create a headless server with no display
@@ -198,7 +198,7 @@ sudo sh /tmp/thinpi/deploy-client/provision.sh \
 On a Raspberry Pi, use `--platform raspberry-pi`, or omit `--platform` and let
 hardware detection choose. Paste the one-time token at the hidden prompt.
 
-The provisioner installs Xorg/Matchbox, Qt runtime, a native managed browser,
+The provisioner installs Xorg/Matchbox, Qt runtime, a native admin browser,
 FreeRDP, TigerVNC, locked OpenSSH, the non-login `thinpi` identity, the systemd
 kiosk, browser/SSH/Xorg policy, and local maintenance. It enrols the unique
 device, disables SDDM/LightDM/GDM, and changes the default boot target.
@@ -245,11 +245,15 @@ detection.
 Before assigning the device to a user, verify:
 
 - power-on always returns to the ThinPi login;
+- login shows up to six most recently used enabled user cards, with **Other user**
+  when additional accounts exist;
+- password fields include a visibility toggle and signed-in users can update
+  their own username, display name, and password from **Edit profile**;
 - normal users cannot switch virtual terminals or open maintenance;
 - closing RDP, VNC or locked SSH returns to the launcher;
 - remote SSH cannot open a local shell, second tab or forwarding channel;
-- the managed browser opens only for an authenticated administrator, has visible
-  controls so it can be closed, and cannot download files or open developer tools;
+- the admin browser opens only after an authenticated administrator handoff and
+  has visible controls plus **Return to ThinPi** so it can be closed;
 - only a controller administrator can request the one-use local maintenance console;
 - leaving maintenance with `exit` returns to the signed-out launcher;
 - the hypervisor does not inject shared clipboard, folders or host shortcuts.
