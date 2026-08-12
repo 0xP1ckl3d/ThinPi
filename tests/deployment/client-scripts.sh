@@ -30,6 +30,8 @@ grep -F 'thinpi-browser-policy' "$ROOT/deploy/client/provision.sh" >/dev/null
 grep -F 'URLBlocklist:["*"]' "$ROOT/deploy/client/browser-policy.sh" >/dev/null
 grep -F 'URLAllowlist:[$controller]' "$ROOT/deploy/client/browser-policy.sh" >/dev/null
 ! grep -F '/*' "$ROOT/deploy/client/browser-policy.sh" >/dev/null
+grep -F '/home/thinpi/.local/share/pki/nssdb' "$ROOT/deploy/client/browser-policy.sh" >/dev/null
+grep -F 'certutil -A' "$ROOT/deploy/client/browser-policy.sh" >/dev/null
 grep -F 'xhost +SI:localuser:thinpi' "$ROOT/deploy/client/xinitrc" >/dev/null
 grep -F 'TTYPath=/dev/tty2' "$ROOT/deploy/client/thinpi-maintenance@.service" >/dev/null
 grep -F 'pipewire-audio pipewire-alsa pipewire-pulse' "$ROOT/deploy/client/provision.sh" >/dev/null

@@ -28,8 +28,14 @@ if systemctl list-unit-files thinpi-agent.service --no-legend 2>/dev/null | grep
   sudo install -m 0644 /tmp/thinpi/deploy-client/hardening/99-thinpi-ssh.conf /etc/ssh/sshd_config.d/99-thinpi.conf
   sudo systemctl daemon-reload
   sudo sshd -t
+  command -v certutil >/dev/null 2>&1 || {
+    sudo apt-get update
+    sudo apt-get install -y libnss3-tools
+  }
   CONTROLLER_URL=$(sed -n 's/^THINPI_API_URL=//p' /etc/thinpi/ui.env | sed -n '1p')
   [ -z "$CONTROLLER_URL" ] || sudo /usr/local/libexec/thinpi-browser-policy "$CONTROLLER_URL"
+  sudo pkill -u thinpi -x chrome 2>/dev/null || true
+  sudo pkill -u thinpi -x chromium 2>/dev/null || true
   sudo systemctl restart thinpi-agent thinpi-ui
   sudo systemctl --no-pager --full status thinpi-agent thinpi-ui
 else

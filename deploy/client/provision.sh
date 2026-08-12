@@ -112,7 +112,7 @@ apt-get install -y --no-install-recommends \
   qml6-module-qtquick-controls qml6-module-qtquick-layouts \
   qml6-module-qtquick-window $AUDIO_PACKAGES curl ca-certificates jq bash \
   tigervnc-viewer tigervnc-tools openssh-client openssh-server \
-  sshpass xterm kbd util-linux
+  sshpass xterm kbd util-linux libnss3-tools
 if [ "$PLATFORM" = generic ]; then
   apt-get install -y --no-install-recommends xserver-xorg-video-all libgl1-mesa-dri
 fi

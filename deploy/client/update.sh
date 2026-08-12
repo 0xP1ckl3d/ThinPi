@@ -27,9 +27,15 @@ LAUNCHER_VERSION=$(dpkg-deb -f "$LAUNCHER_PACKAGE" Version)
 
 apt-get install -y "$AGENT_PACKAGE" "$LAUNCHER_PACKAGE"
 if [ -x /usr/local/libexec/thinpi-browser-policy ] && [ -r /etc/thinpi/ui.env ]; then
+  command -v certutil >/dev/null 2>&1 || {
+    apt-get update
+    apt-get install -y libnss3-tools
+  }
   CONTROLLER_URL=$(sed -n 's/^THINPI_API_URL=//p' /etc/thinpi/ui.env | sed -n '1p')
   [ -z "$CONTROLLER_URL" ] || /usr/local/libexec/thinpi-browser-policy "$CONTROLLER_URL"
 fi
+pkill -u thinpi -x chrome 2>/dev/null || true
+pkill -u thinpi -x chromium 2>/dev/null || true
 systemctl daemon-reload
 systemctl restart thinpi-agent thinpi-ui
 systemctl --no-pager --full status thinpi-agent thinpi-ui
