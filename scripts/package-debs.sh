@@ -25,7 +25,7 @@ for package in agent launcher; do
     install -m 0644 "$ROOT/deploy/client/thinpi-ui.service" "$STAGE/lib/systemd/system/"
     install -m 0644 "$ROOT/deploy/client/thinpi-maintenance@.service" "$STAGE/lib/systemd/system/"
     install -m 0644 "$ROOT/deploy/client/thinpi.target" "$STAGE/lib/systemd/system/"
-    install -m 0755 "$ROOT/deploy/client/xinitrc" "$STAGE/etc/thinpi/xinitrc"
+    install -m 0755 "$ROOT/deploy/client/xinitrc" "$STAGE/usr/local/libexec/thinpi-xinitrc"
     install -m 0755 "$ROOT/deploy/client/maintenance-session.sh" "$STAGE/usr/local/libexec/thinpi-maintenance-session"
     install -m 0644 "$ROOT/deploy/client/hardening/Xwrapper.config" "$STAGE/etc/X11/Xwrapper.config"
     install -m 0644 "$ROOT/deploy/client/hardening/10-thinpi-kiosk.conf" "$STAGE/etc/X11/xorg.conf.d/10-thinpi-kiosk.conf"

@@ -236,9 +236,9 @@ install -m 0644 "$SCRIPT_DIR/thinpi-agent.service" /etc/systemd/system/thinpi-ag
 install -m 0644 "$SCRIPT_DIR/thinpi-ui.service" /etc/systemd/system/thinpi-ui.service
 install -m 0644 "$SCRIPT_DIR/thinpi-maintenance@.service" /etc/systemd/system/thinpi-maintenance@.service
 install -m 0644 "$SCRIPT_DIR/thinpi.target" /etc/systemd/system/thinpi.target
-install -m 0755 "$SCRIPT_DIR/xinitrc" /etc/thinpi/xinitrc
 install -d -o root -g root -m 0755 /usr/local/libexec /etc/X11/xorg.conf.d \
   /etc/chromium/policies/managed /etc/opt/chrome/policies/managed
+install -m 0755 "$SCRIPT_DIR/xinitrc" /usr/local/libexec/thinpi-xinitrc
 install -m 0755 "$SCRIPT_DIR/maintenance-session.sh" /usr/local/libexec/thinpi-maintenance-session
 install -m 0644 "$SCRIPT_DIR/hardening/Xwrapper.config" /etc/X11/Xwrapper.config
 install -m 0644 "$SCRIPT_DIR/hardening/10-thinpi-kiosk.conf" /etc/X11/xorg.conf.d/10-thinpi-kiosk.conf

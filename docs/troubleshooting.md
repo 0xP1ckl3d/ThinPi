@@ -158,7 +158,9 @@ sudo journalctl -b -u thinpi-agent -u thinpi-ui --no-pager
 ```
 
 Expected default target is `thinpi.target`. Verify `/usr/bin/thinpi-launcher`,
-`/etc/thinpi/xinitrc`, Xorg packages, and tty7 availability.
+`/usr/local/libexec/thinpi-xinitrc`, Xorg packages, and tty7 availability. The
+startup script must not be placed under the private `0750` `/etc/thinpi`
+directory because the non-login kiosk identity cannot traverse it.
 
 If Xorg reports `Only console users are allowed to run the X server`, the
 distribution-generated `/etc/X11/Xwrapper.config` is still installed. The

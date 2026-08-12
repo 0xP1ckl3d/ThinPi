@@ -19,8 +19,8 @@ if systemctl list-unit-files thinpi-agent.service --no-legend 2>/dev/null | grep
   sudo install -m 0644 /tmp/thinpi/deploy-client/thinpi-ui.service /etc/systemd/system/thinpi-ui.service
   sudo install -m 0644 /tmp/thinpi/deploy-client/thinpi-maintenance@.service /etc/systemd/system/thinpi-maintenance@.service
   sudo install -m 0644 /tmp/thinpi/deploy-client/thinpi.target /etc/systemd/system/thinpi.target
-  sudo install -m 0755 /tmp/thinpi/deploy-client/xinitrc /etc/thinpi/xinitrc
   sudo install -d -o root -g root -m 0755 /usr/local/libexec /etc/X11/xorg.conf.d /etc/ssh/sshd_config.d
+  sudo install -m 0755 /tmp/thinpi/deploy-client/xinitrc /usr/local/libexec/thinpi-xinitrc
   sudo install -m 0755 /tmp/thinpi/deploy-client/maintenance-session.sh /usr/local/libexec/thinpi-maintenance-session
   sudo install -m 0644 /tmp/thinpi/deploy-client/hardening/Xwrapper.config /etc/X11/Xwrapper.config
   sudo install -m 0644 /tmp/thinpi/deploy-client/hardening/10-thinpi-kiosk.conf /etc/X11/xorg.conf.d/10-thinpi-kiosk.conf
