@@ -188,8 +188,9 @@ If the log repeatedly reports that `chgrp` cannot find
 `/run/thinpi/agent.sock`, an obsolete agent unit with a socket-startup race is
 installed. Pull the current repository and rerun `scripts/deploy-client.sh`.
 The current unit runs the root agent with primary group `thinpi`, so the agent
-creates the mode `0660` socket as `root:thinpi` without a post-start race. No
-new enrolment token is needed.
+creates the mode `0660` socket as `root:thinpi`; its post-start check only waits
+for the socket before allowing the UI to start. No new enrolment token is
+needed.
 
 The socket should be group `thinpi` with mode `0660`, and the agent must remain
 active.

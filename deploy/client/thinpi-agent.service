@@ -7,6 +7,7 @@ Wants=network-online.target
 Type=simple
 Group=thinpi
 ExecStart=/usr/bin/thinpi-agent serve --config /etc/thinpi/agent.json
+ExecStartPost=/bin/sh -c 'until test -S /run/thinpi/agent.sock; do sleep 0.05; done'
 Restart=always
 RestartSec=2
 Environment=DISPLAY=:0
