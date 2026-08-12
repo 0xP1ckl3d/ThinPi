@@ -104,6 +104,28 @@ sh scripts/generate-controller-pki.sh \
 Back up `$HOME/thinpi-pki-production/thinpi-ca.key` in an encrypted/offline
 location. Never copy that CA private key to either VM.
 
+Trust only the public CA on the workstation that will open the admin console.
+On Ubuntu/Linux:
+
+```sh
+sudo install -m 0644 "$HOME/thinpi-pki-production/thinpi-ca.crt" \
+  /usr/local/share/ca-certificates/thinpi-controller.crt
+sudo update-ca-certificates
+```
+
+If the CA was generated in WSL and the admin browser runs on Windows, first
+copy `thinpi-ca.crt` to your Windows Downloads folder. Then open PowerShell as
+Administrator and run:
+
+```powershell
+Import-Certificate `
+  -FilePath "$env:USERPROFILE\Downloads\thinpi-ca.crt" `
+  -CertStoreLocation Cert:\LocalMachine\Root
+```
+
+This trusts certificates issued by the ThinPi CA, so protect the CA private
+key as carefully as an administrator password.
+
 Copy only the server pair to the controller and the public CA certificate to
 the client:
 
@@ -165,6 +187,19 @@ curl --fail --show-error \
   --cacert deploy/controller/tls/tls.crt \
   https://10.10.10.60:8443/healthz
 ```
+
+If UFW is active, permit SSH and TCP 8443 only from the local client/admin
+network. This example assumes the two VMs are on `10.10.10.0/24`; change the
+subnet if yours differs:
+
+```sh
+sudo ufw status
+sudo ufw allow OpenSSH
+sudo ufw allow from 10.10.10.0/24 to any port 8443 proto tcp
+sudo ufw status numbered
+```
+
+Do not expose port 8443 directly to the public Internet.
 
 Create the first real administrator:
 
