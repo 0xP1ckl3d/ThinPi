@@ -206,6 +206,17 @@ COMPOSE_ENV_FILE=deploy/controller/.env \
   sh scripts/bootstrap-admin.sh
 ```
 
+Enter the password twice. Successful output ends with:
+
+```text
+Administrator created.
+Username: admin
+Display name: Administrator
+```
+
+Use `admin` in the login form. `Administrator` is the display name, not the
+username.
+
 Open `https://10.10.10.60:8443/` in a browser that trusts
 `thinpi-ca.crt`. Production starts empty: create a test user, one credential,
 one real connection, and an access rule linking all three.

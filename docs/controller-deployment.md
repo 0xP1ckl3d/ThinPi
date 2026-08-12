@@ -292,7 +292,16 @@ COMPOSE_ENV_FILE=deploy/controller/.env \
 ```
 
 Use at least eight characters and store the password in your password manager.
-Expected output is `Administrator created.`
+The script asks twice and creates nothing if the entries differ. Success
+identifies the exact login:
+
+```text
+Administrator created.
+Username: admin
+Display name: Administrator
+```
+
+Sign in with username `admin`; `Administrator` is only the display name.
 
 Open:
 

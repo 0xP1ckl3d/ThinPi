@@ -146,7 +146,7 @@ func run(args []string) error {
 		if _, err := store.CreateUser(context.Background(), *username, *displayName, password, true, true); err != nil {
 			return err
 		}
-		fmt.Println("Administrator created.")
+		fmt.Printf("Administrator created.\nUsername: %s\nDisplay name: %s\n", *username, *displayName)
 		return nil
 	case "serve":
 		return serve(o, store)

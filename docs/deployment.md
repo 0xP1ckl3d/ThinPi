@@ -329,8 +329,10 @@ sudo env COMPOSE_ENV_FILE=deploy/controller/.env \
   sh scripts/bootstrap-admin.sh
 ```
 
-Enter a new password of at least eight characters when prompted. The password
-does not echo. The created username is `admin`.
+Enter a new password of at least eight characters twice. It does not echo, and
+the script creates nothing if the entries differ. Successful output explicitly
+reports `Username: admin`; `Administrator` is the display name, not the login
+username.
 
 Install the public CA in Windows so Edge and Chrome trust it:
 
