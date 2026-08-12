@@ -130,13 +130,17 @@ sudo install -o root -g 65532 -m 0640 /secure/source/server.key \
 
 ### Option B: private home CA
 
-Use your existing private CA if you have one. If you create a new CA, keep its
-private key off the controller host and protect it like a root credential.
+Use your existing private CA if you have one. For the simplest two-server
+deployment, the helper may run directly on the controller; keep its CA key mode
+`0600` and never mount it into the container. Moving that key to encrypted
+offline storage is recommended hardening, not a third-server requirement.
 Issue a server certificate containing `DNS:thinpi.home.example`; include an IP
 SAN only if clients will deliberately use the IP address.
 
-For a new standalone ThinPi private CA, run this from the source tree on a
-secure Linux/WSL administrator workstation:
+For maximum separation, run this from the source tree on a secure Linux/WSL
+administrator workstation. For direct controller generation, run the same
+command from `/opt/thinpi` and install `tls.crt`/`tls.key` locally as shown in
+the worked [Ubuntu/Lubuntu guide](ubuntu-lubuntu-deployment.md):
 
 ```sh
 sh scripts/generate-controller-pki.sh \

@@ -195,8 +195,13 @@ These steps use a private ThinPi certificate authority. Four files are made:
 | `thinpi-ca.crt` | Each Pi and administrator browser | No |
 | `thinpi-ca.key` | Offline backup only | **Yes — never copy to controller or Pi** |
 
-Run this from the project root in **WSL Ubuntu on your workstation**, not on
-the controller:
+The simplest two-server deployment can generate these files directly on the
+controller from `/opt/thinpi`; no third server is required. Running the helper
+from WSL on a separate workstation is optional hardening that keeps the CA key
+off the controller. The worked [Ubuntu/Lubuntu guide](ubuntu-lubuntu-deployment.md)
+shows the direct-on-controller commands.
+
+For the optional separate-workstation method, run:
 
 ```sh
 sudo apt update

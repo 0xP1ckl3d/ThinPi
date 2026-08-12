@@ -65,10 +65,12 @@ sudo apt update
 sudo apt install -y docker-ce docker-ce-cli containerd.io \
   docker-buildx-plugin docker-compose-plugin
 sudo usermod -aG docker "$USER"
+newgrp docker
 ```
 
-The `docker` group has root-equivalent control of this dedicated server. Sign
-out and back in so the group change applies, then verify:
+The `docker` group has root-equivalent control of this dedicated server.
+`newgrp docker` starts a new shell with that membership immediately, so you do
+not need to sign out and reconnect. Then verify:
 
 ```sh
 docker version
@@ -90,68 +92,54 @@ git status --short
 
 ## Part C — create TLS without DNS
 
-Generate the private CA and the server certificate on your administrator
-workstation, not on the controller. In Linux, macOS, or WSL, clone the same
-repository and run:
+Do this directly on the controller. A third server or separate Linux
+workstation is not required. The CA key is used only when issuing or renewing
+certificates; it is not mounted into the running controller container.
 
 ```sh
-git clone https://github.com/0xP1ckl3d/ThinPi.git
-cd ThinPi
+cd /opt/thinpi
 sh scripts/generate-controller-pki.sh \
   thinpi-controller 10.10.10.60 "$HOME/thinpi-pki-production"
+sudo install -d -o root -g 65532 -m 0750 deploy/controller/tls
+sudo install -o root -g 65532 -m 0640 \
+  "$HOME/thinpi-pki-production/tls.crt" \
+  deploy/controller/tls/tls.crt
+sudo install -o root -g 65532 -m 0640 \
+  "$HOME/thinpi-pki-production/tls.key" \
+  deploy/controller/tls/tls.key
+openssl x509 -in deploy/controller/tls/tls.crt -noout \
+  -subject -issuer -dates -ext subjectAltName
 ```
 
-Back up `$HOME/thinpi-pki-production/thinpi-ca.key` in an encrypted/offline
-location. Never copy that CA private key to either VM.
+The final output must contain `IP Address:10.10.10.60`.
 
-Trust only the public CA on the workstation that will open the admin console.
-On Ubuntu/Linux:
+Still on the controller, copy the public CA certificate to Lubuntu:
 
 ```sh
-sudo install -m 0644 "$HOME/thinpi-pki-production/thinpi-ca.crt" \
-  /usr/local/share/ca-certificates/thinpi-controller.crt
-sudo update-ca-certificates
+scp "$HOME/thinpi-pki-production/thinpi-ca.crt" \
+  <CLIENT_USER>@<CLIENT_IP>:/tmp/thinpi-ca.crt
 ```
 
-If the CA was generated in WSL and the admin browser runs on Windows, first
-copy `thinpi-ca.crt` to your Windows Downloads folder. Then open PowerShell as
-Administrator and run:
+The controller can retain `$HOME/thinpi-pki-production/thinpi-ca.key` with
+mode `0600` for later certificate renewal. For stronger security, optionally
+copy that one file to encrypted removable/offline storage and remove the
+controller copy. That is hardening, not a deployment requirement.
+
+To trust the public CA in a Windows admin browser, run this from Windows
+PowerShell to download it:
+
+```powershell
+scp <CONTROLLER_USER>@10.10.10.60:/home/<CONTROLLER_USER>/thinpi-pki-production/thinpi-ca.crt `
+  "$env:USERPROFILE\Downloads\thinpi-ca.crt"
+```
+
+Then open PowerShell as Administrator and run:
 
 ```powershell
 Import-Certificate `
   -FilePath "$env:USERPROFILE\Downloads\thinpi-ca.crt" `
   -CertStoreLocation Cert:\LocalMachine\Root
 ```
-
-This trusts certificates issued by the ThinPi CA, so protect the CA private
-key as carefully as an administrator password.
-
-Copy only the server pair to the controller and the public CA certificate to
-the client:
-
-```sh
-scp "$HOME/thinpi-pki-production/tls.crt" \
-  "$HOME/thinpi-pki-production/tls.key" \
-  <CONTROLLER_USER>@10.10.10.60:/tmp/
-scp "$HOME/thinpi-pki-production/thinpi-ca.crt" \
-  <CLIENT_USER>@<CLIENT_IP>:/tmp/thinpi-ca.crt
-```
-
-Back on the controller:
-
-```sh
-cd /opt/thinpi
-sudo install -d -o root -g 65532 -m 0750 deploy/controller/tls
-sudo install -o root -g 65532 -m 0640 /tmp/tls.crt \
-  deploy/controller/tls/tls.crt
-sudo install -o root -g 65532 -m 0640 /tmp/tls.key \
-  deploy/controller/tls/tls.key
-sudo rm -f /tmp/tls.crt /tmp/tls.key
-openssl x509 -in deploy/controller/tls/tls.crt -noout \
-  -subject -issuer -dates -ext subjectAltName
-```
-
-The final output must contain `IP Address:10.10.10.60`.
 
 ## Part D — configure and start the real controller
 
