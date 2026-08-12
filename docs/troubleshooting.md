@@ -160,6 +160,15 @@ sudo journalctl -b -u thinpi-agent -u thinpi-ui --no-pager
 Expected default target is `thinpi.target`. Verify `/usr/bin/thinpi-launcher`,
 `/etc/thinpi/xinitrc`, Xorg packages, and tty7 availability.
 
+If Xorg reports `Only console users are allowed to run the X server`, the
+distribution-generated `/etc/X11/Xwrapper.config` is still installed. The
+ThinPi-managed file uses `allowed_users=anybody` because the kiosk starts from
+a systemd/PAM session rather than an interactive getty. This does not provide
+a login shell or sudo access to `thinpi`; the nologin account, masked getties,
+Xorg escape-key restrictions, and systemd service boundary remain in force.
+Pull the current repository and rerun `scripts/deploy-client.sh` to install the
+managed policy.
+
 ### Launcher cannot reach controller but agent can
 
 The agent may trust `/etc/thinpi/controller-ca.pem` while Qt lacks system trust.

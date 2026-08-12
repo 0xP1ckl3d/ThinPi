@@ -240,6 +240,7 @@ install -m 0755 "$SCRIPT_DIR/xinitrc" /etc/thinpi/xinitrc
 install -d -o root -g root -m 0755 /usr/local/libexec /etc/X11/xorg.conf.d \
   /etc/chromium/policies/managed /etc/opt/chrome/policies/managed
 install -m 0755 "$SCRIPT_DIR/maintenance-session.sh" /usr/local/libexec/thinpi-maintenance-session
+install -m 0644 "$SCRIPT_DIR/hardening/Xwrapper.config" /etc/X11/Xwrapper.config
 install -m 0644 "$SCRIPT_DIR/hardening/10-thinpi-kiosk.conf" /etc/X11/xorg.conf.d/10-thinpi-kiosk.conf
 install -m 0644 "$SCRIPT_DIR/hardening/99-thinpi-ssh.conf" /etc/ssh/sshd_config.d/99-thinpi.conf
 if [ "$DISABLE_SSH_PASSWORDS" = true ]; then

@@ -27,7 +27,9 @@
   Password material uses an ephemeral owner-only file and never appears in argv.
 - The kiosk account has `nologin`, no sudo rights, no display manager and no
   getty. Xorg blocks VT switching, server termination and mode-switch key
-  sequences. systemd restarts the launcher if it exits.
+  sequences. The Xorg wrapper permits service launch by a non-console identity,
+  but does not grant a shell, sudo, or additional application capability;
+  systemd restarts the launcher if it exits.
 - Client provisioning preserves the host's existing administrator SSH
   password-authentication setting. Root login and forwarding remain disabled;
   key-only SSH is available only through `--disable-ssh-passwords`.
