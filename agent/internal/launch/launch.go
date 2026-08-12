@@ -75,6 +75,11 @@ type Clients struct {
 type Runner interface {
 	Run(context.Context, Command) error
 }
+
+type ClientRuntimeError struct{ Message string }
+
+func (e *ClientRuntimeError) Error() string { return e.Message }
+
 type ExecRunner struct{}
 
 func (ExecRunner) Run(ctx context.Context, c Command) error {
@@ -192,7 +197,13 @@ func (m *Manager) run(ctx context.Context, id, ticket string) {
 		return
 	}
 	if err != nil && !errors.Is(ctx.Err(), context.Canceled) {
-		m.set(Failed, nil, errors.New("The remote client exited before a session could be established. Check that the target is reachable and available."))
+		failure := errors.New("The installed remote client exited unexpectedly. Ask an administrator to inspect the ThinPi agent journal.")
+		var runtimeError *ClientRuntimeError
+		if errors.As(err, &runtimeError) {
+			failure = errors.New(runtimeError.Message)
+		}
+		m.log.Warn("native client failure", "connection_id", manifest.ConnectionID, "detail", failure.Error())
+		m.set(Failed, nil, failure)
 		time.AfterFunc(2*time.Second, func() { m.set(Idle, nil, nil) })
 		return
 	}
@@ -272,11 +283,15 @@ type RDPConfig struct {
 	Smartcards        bool   `json:"smartcards"`
 	AutoReconnect     bool   `json:"auto_reconnect"`
 	CertificateName   string `json:"certificate_name,omitempty"`
+	CertificateMode   string `json:"certificate_mode,omitempty"`
 }
 
 func FreeRDPCommand(binary string, x api.Manifest) (Command, error) {
 	if err := validateHost(x.Host, x.Port); err != nil {
 		return Command{}, err
+	}
+	if x.CredentialType == "ssh_private_key" {
+		return Command{}, errors.New("an SSH private key cannot be used for RDP")
 	}
 	if strings.ContainsAny(x.Username, "\r\n") || strings.ContainsAny(x.Password, "\r\n") {
 		return Command{}, errors.New("credential contains invalid characters")
@@ -335,6 +350,20 @@ func FreeRDPCommand(binary string, x api.Manifest) (Command, error) {
 			return Command{}, errors.New("invalid certificate name")
 		}
 		args = append(args, "/cert-name:"+cfg.CertificateName)
+	}
+	certificateMode := cfg.CertificateMode
+	if certificateMode == "" {
+		certificateMode = "tofu"
+	}
+	switch certificateMode {
+	case "tofu":
+		args = append(args, "/cert:tofu")
+	case "deny":
+		args = append(args, "/cert:deny")
+	case "ignore":
+		args = append(args, "/cert:ignore")
+	default:
+		return Command{}, errors.New("invalid RDP certificate mode")
 	}
 	return Command{Path: binary, Args: []string{"/args-from:stdin"}, Stdin: strings.Join(args, "\n") + "\n"}, nil
 }
@@ -408,12 +437,20 @@ func SSHCommand(terminalBinary, sshBinary, sshpassBinary string, x api.Manifest)
 		"-o", "EscapeChar=none", "-o", "PermitLocalCommand=no", "-o", "ClearAllForwardings=yes",
 		"-o", "DisableForwarding=yes", "-o", "ForwardAgent=no", "-o", "ForwardX11=no",
 		"-o", "ForwardX11Trusted=no", "-o", "ControlMaster=no", "-o", "ProxyCommand=none",
-		"-o", "ProxyJump=none", "-o", "IdentityAgent=none", "-o", "IdentityFile=none",
-		"-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=yes",
+		"-o", "ProxyJump=none", "-o", "IdentityAgent=none", "-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=yes",
 		"-o", "CheckHostIP=yes", "-o", "UserKnownHostsFile={known_hosts_file}",
 		"-o", "GlobalKnownHostsFile=/dev/null", "-p", strconv.Itoa(x.Port), "-l", x.Username, x.Host}
 	child := []string{sshBinary}
-	if x.Password != "" {
+	if x.CredentialType == "ssh_private_key" {
+		if x.Password == "" || strings.ContainsRune(x.Password, '\x00') {
+			return Command{}, errors.New("SSH private key is unavailable")
+		}
+		files = append(files, FileInput{Placeholder: "{ssh_identity_file}", Content: strings.TrimSpace(x.Password) + "\n"})
+		sshArgs = append([]string{"-o", "IdentityFile={ssh_identity_file}", "-o", "PreferredAuthentications=publickey", "-o", "PubkeyAuthentication=yes", "-o", "PasswordAuthentication=no", "-o", "KbdInteractiveAuthentication=no"}, sshArgs...)
+	} else {
+		sshArgs = append([]string{"-o", "IdentityFile=none"}, sshArgs...)
+	}
+	if x.Password != "" && x.CredentialType != "ssh_private_key" {
 		if sshpassBinary == "" {
 			return Command{}, errors.New("SSH client is unavailable")
 		}
@@ -434,6 +471,9 @@ func SSHCommand(terminalBinary, sshBinary, sshpassBinary string, x api.Manifest)
 func VNCCommand(binary string, x api.Manifest) (Command, error) {
 	if err := validateHost(x.Host, x.Port); err != nil {
 		return Command{}, err
+	}
+	if x.CredentialType == "ssh_private_key" {
+		return Command{}, errors.New("an SSH private key cannot be used for VNC")
 	}
 	if strings.ContainsAny(x.Username, "\r\n\x00") {
 		return Command{}, errors.New("invalid VNC username")

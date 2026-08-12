@@ -133,9 +133,10 @@ Verify the following before testing the launcher:
 1. **People** shows account enable/disable actions and Restrictions.
 2. **Connections** offers RDP, Linux VNC, locked SSH, Moonlight, and a development-only
    demo type.
-3. **Credentials** stores a remote username/password by label.
-4. **Access rules** assigns a connection and credential to a person or group.
-5. **Devices** shows the Development Pi heartbeat.
+3. **Credentials** stores a remote username/password or SSH private key by label.
+4. People/Groups expose **Assign connections**, and each connection exposes
+   **Assign access**; both open the same preselected assignment workflow.
+5. **Devices** shows the development client heartbeat.
 
 An expired admin browser session redirects to the login screen. Visiting `/`
 or `/admin/login` while already signed in redirects to `/admin`.

@@ -356,6 +356,21 @@ func TestAdministratorCRUD(t *testing.T) {
 		t.Fatalf("connection %d %#v", status, connection)
 	}
 	connectionID := int64(connection["id"].(float64))
+	status, listedConnections := request(t, client, "GET", server.URL+"/api/v1/admin/connections", token, nil)
+	if status != 200 {
+		t.Fatalf("connection list status=%d", status)
+	}
+	items := listedConnections["items"].([]any)
+	var savedCredentialID int64
+	for _, item := range items {
+		entry := item.(map[string]any)
+		if int64(entry["id"].(float64)) == connectionID && entry["credential_id"] != nil {
+			savedCredentialID = int64(entry["credential_id"].(float64))
+		}
+	}
+	if savedCredentialID != credentialID {
+		t.Fatalf("connection credential=%d, want %d", savedCredentialID, credentialID)
+	}
 	status, _ = request(t, client, "POST", server.URL+"/api/v1/admin/permissions", token, map[string]any{"subject_type": "user", "subject_id": int64(user["id"].(float64)), "connection_id": connectionID, "can_launch": true})
 	if status != 201 {
 		t.Fatalf("permission status=%d", status)
@@ -414,7 +429,12 @@ func TestAdminJavaScriptDoesNotPassMapIndexToFetch(t *testing.T) {
 	if !bytes.Contains(body, []byte("window.location.replace('/admin/login')")) {
 		t.Fatal("expired admin API sessions do not redirect the browser to login")
 	}
-	if !bytes.Contains(body, []byte("ssh:{port:22")) || !bytes.Contains(body, []byte("REPLACE_WITH_VERIFIED_SERVER_PUBLIC_KEY")) {
-		t.Fatal("admin SSH editor defaults are missing")
+	for _, required := range []string{"ssh:{port:22", "ssh_host_key", "ssh_private_key", "assign-connection", "assign-user", "remove-assignment", "certificate_mode:'tofu'", "return-client"} {
+		if !bytes.Contains(body, []byte(required)) {
+			t.Fatalf("admin workflow is missing %q", required)
+		}
+	}
+	if bytes.Contains(body, []byte("REPLACE_WITH_VERIFIED_SERVER_PUBLIC_KEY")) {
+		t.Fatal("admin SSH editor still ships an invalid placeholder host key")
 	}
 }

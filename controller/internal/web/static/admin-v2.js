@@ -67,17 +67,17 @@ function renderDashboard() {
 function renderPeople() {
   $('#users-body').innerHTML = state.users.map(user => {
     const policy = policyFor(user.id);
-    return `<tr><td><div class="person"><span class="avatar">${esc(user.display_name.slice(0,1).toUpperCase())}</span><div><strong>${esc(user.display_name)}</strong><small>@${esc(user.username)}</small></div></div></td><td>${user.is_admin ? badge('Administrator','blue') : badge('Member')}</td><td><small>${esc(policySummary(policy))}</small></td><td>${user.enabled ? badge('Active','green') : badge('Disabled','red')}</td><td><div class="actions"><button class="small-button" data-action="policy" data-id="${user.id}">Restrictions</button><button class="small-button" data-action="edit-user" data-id="${user.id}">Edit</button><button class="small-button ${user.enabled ? 'danger-button' : ''}" data-action="toggle-user" data-id="${user.id}">${user.enabled ? 'Disable' : 'Enable'}</button></div></td></tr>`;
+    return `<tr><td><div class="person"><span class="avatar">${esc(user.display_name.slice(0,1).toUpperCase())}</span><div><strong>${esc(user.display_name)}</strong><small>@${esc(user.username)}</small></div></div></td><td>${user.is_admin ? badge('Administrator','blue') : badge('Member')}</td><td><small>${esc(policySummary(policy))}</small></td><td>${user.enabled ? badge('Active','green') : badge('Disabled','red')}</td><td><div class="actions"><button class="small-button" data-action="assign-user" data-id="${user.id}">Assign connections</button><button class="small-button" data-action="policy" data-id="${user.id}">Restrictions</button><button class="small-button" data-action="edit-user" data-id="${user.id}">Edit</button><button class="small-button ${user.enabled ? 'danger-button' : ''}" data-action="toggle-user" data-id="${user.id}">${user.enabled ? 'Disable' : 'Enable'}</button></div></td></tr>`;
   }).join('');
-  $('#groups-list').innerHTML = state.groups.map(group => `<article class="list-card"><div class="list-card-main"><span class="list-icon">◎</span><div><h3>${esc(group.name)}</h3><p>${esc(group.description || 'No description')}</p></div></div><div class="actions"><button class="small-button" data-action="edit-group" data-id="${group.id}">Edit</button><button class="small-button danger-button" data-action="delete" data-path="/groups/${group.id}">Delete</button></div></article>`).join('');
+  $('#groups-list').innerHTML = state.groups.map(group => `<article class="list-card"><div class="list-card-main"><span class="list-icon">◎</span><div><h3>${esc(group.name)}</h3><p>${esc(group.description || 'No description')}</p></div></div><div class="actions"><button class="small-button" data-action="assign-group" data-id="${group.id}">Assign connections</button><button class="small-button" data-action="edit-group" data-id="${group.id}">Edit</button><button class="small-button danger-button" data-action="delete" data-path="/groups/${group.id}">Delete</button></div></article>`).join('');
 }
 
 function renderConnections() {
-  $('#connections-list').innerHTML = state.connections.map(connection => `<article class="connection-card"><div class="connection-card-head"><span class="protocol-icon">${connection.protocol === 'vnc' ? 'L' : connection.protocol === 'ssh' ? '&gt;_' : connection.protocol === 'rdp' ? 'W' : connection.protocol === 'moonlight' ? 'M' : 'D'}</span>${connection.enabled ? badge('Available','green') : badge('Disabled','red')}</div><h3>${esc(connection.name)}</h3><p>${esc(connection.description || 'No description')}</p><div class="connection-meta">${badge(protocolLabel(connection.protocol),'blue')}${badge(`${connection.host}:${connection.port}`)}${badge(credentialName(connection.credential_id))}</div><div class="actions"><button class="small-button" data-action="edit-connection" data-id="${connection.id}">Configure</button><button class="small-button" data-action="toggle-connection" data-id="${connection.id}">${connection.enabled ? 'Disable' : 'Enable'}</button><button class="small-button danger-button" data-action="delete" data-path="/connections/${connection.id}">Delete</button></div></article>`).join('');
+  $('#connections-list').innerHTML = state.connections.map(connection => `<article class="connection-card"><div class="connection-card-head"><span class="protocol-icon">${connection.protocol === 'vnc' ? 'L' : connection.protocol === 'ssh' ? '&gt;_' : connection.protocol === 'rdp' ? 'W' : connection.protocol === 'moonlight' ? 'M' : 'D'}</span>${connection.enabled ? badge('Available','green') : badge('Disabled','red')}</div><h3>${esc(connection.name)}</h3><p>${esc(connection.description || 'No description')}</p><div class="connection-meta">${badge(protocolLabel(connection.protocol),'blue')}${badge(`${connection.host}:${connection.port}`)}${badge(credentialName(connection.credential_id))}</div><div class="actions"><button class="small-button" data-action="assign-connection" data-id="${connection.id}">Assign access</button><button class="small-button" data-action="edit-connection" data-id="${connection.id}">Configure</button><button class="small-button" data-action="toggle-connection" data-id="${connection.id}">${connection.enabled ? 'Disable' : 'Enable'}</button><button class="small-button danger-button" data-action="delete" data-path="/connections/${connection.id}">Delete</button></div></article>`).join('');
 }
 
 function renderAccess() {
-  $('#permissions-body').innerHTML = state.permissions.map(rule => `<tr><td>${badge(rule.subject_type === 'user' ? 'Person' : 'Group', rule.subject_type === 'user' ? 'blue' : '')} <strong>${esc(rule.subject_name)}</strong></td><td>${esc(rule.connection_name)}</td><td>${rule.credential_name ? badge(rule.credential_name,'green') : '<span class="muted">Connection default</span>'}</td><td>${rule.can_launch ? badge('Allowed','green') : badge('Blocked','red')}</td></tr>`).join('');
+  $('#permissions-body').innerHTML = state.permissions.map(rule => `<tr><td>${badge(rule.subject_type === 'user' ? 'Person' : 'Group', rule.subject_type === 'user' ? 'blue' : '')} <strong>${esc(rule.subject_name)}</strong></td><td>${esc(rule.connection_name)}</td><td>${rule.credential_name ? badge(rule.credential_name,'green') : '<span class="muted">Connection default</span>'}</td><td>${rule.can_launch ? badge('Allowed','green') : badge('Blocked','red')} <button class="small-button danger-button" data-action="remove-assignment" data-subject-type="${rule.subject_type}" data-subject-id="${rule.subject_id}" data-connection-id="${rule.connection_id}">Remove</button></td></tr>`).join('');
   fillSelectors();
 }
 
@@ -101,13 +101,15 @@ function renderAudit() {
 }
 
 function fillSelectors() {
+  const selectedSubject=$('#perm-subject').value, selectedConnection=$('#perm-connection').value, selectedPermissionCredential=$('#perm-credential').value, selectedConnectionCredential=$('#connection-credential').value;
   const subjectType = $('#perm-subject-type').value;
   const subjects = subjectType === 'user' ? state.users : state.groups;
   $('#perm-subject').innerHTML = subjects.map(item => `<option value="${item.id}">${esc(item.display_name || item.name)}</option>`).join('');
   $('#perm-connection').innerHTML = state.connections.map(item => `<option value="${item.id}">${esc(item.name)}</option>`).join('');
-  const credentialOptions = state.credentials.map(item => `<option value="${item.id}">${esc(item.name)} · ${esc(item.username || 'no username')}</option>`).join('');
-  $('#perm-credential').innerHTML = '<option value="">Use connection default</option>' + credentialOptions;
-  $('#connection-credential').innerHTML = '<option value="">No stored credential</option>' + credentialOptions;
+  if([...$('#perm-subject').options].some(option=>option.value===selectedSubject))$('#perm-subject').value=selectedSubject;
+  if([...$('#perm-connection').options].some(option=>option.value===selectedConnection))$('#perm-connection').value=selectedConnection;
+  fillPermissionCredentialOptions(selectedPermissionCredential);
+  fillConnectionCredentialOptions(selectedConnectionCredential);
   $('#member-user').innerHTML = state.users.map(item => `<option value="${item.id}">${esc(item.display_name)}</option>`).join('');
   $('#member-group').innerHTML = state.groups.map(item => `<option value="${item.id}">${esc(item.name)}</option>`).join('');
 }
@@ -137,21 +139,32 @@ async function submit(form, path, mapping) {
 
 $('#user-form').onsubmit = event => { event.preventDefault(); submit(event.target,'/users',{is_admin:v=>v==='on',enabled:v=>v==='on'}); };
 $('#group-form').onsubmit = event => { event.preventDefault(); submit(event.target,'/groups'); };
-$('#credential-form').onsubmit = event => { event.preventDefault(); submit(event.target,'/credentials'); };
+$('#credential-form').onsubmit = event => { event.preventDefault(); const data=formData(event.target); data.secret=data.secret_type==='ssh_private_key'?data.private_key:data.secret_type==='password'?data.password:''; delete data.password;delete data.private_key; submitCredential(event.target,data); };
 $('#permission-form').onsubmit = event => { event.preventDefault(); submit(event.target,'/permissions',{subject_id:Number,connection_id:Number,credential_id:v=>v?Number(v):null,can_launch:v=>v==='on'}); };
 $('#membership-form').onsubmit = event => { event.preventDefault(); submit(event.target,'/memberships',{user_id:Number,group_id:Number,member:v=>v==='on'}); };
 $('#token-form').onsubmit = async event => { event.preventDefault(); try { const data=formData(event.target,{ttl_minutes:Number}); const result=await api('/enrolment-tokens',{method:'POST',body:JSON.stringify(data)}); $('#new-token').textContent=result.token; note('Enrolment token created'); } catch(error){note(error.message,true);} };
-$('#connection-form').onsubmit = event => { event.preventDefault(); submit(event.target,'/connections',{port:Number,sort_order:Number,enabled:v=>v==='on',credential_id:v=>v?Number(v):null,protocol_config:v=>JSON.parse(v||'{}')}); };
+$('#connection-form').onsubmit = event => { event.preventDefault(); const data=formData(event.target,{port:Number,sort_order:Number,enabled:v=>v==='on',credential_id:v=>v?Number(v):null,protocol_config:v=>JSON.parse(v||'{}')}); if(data.protocol==='ssh')data.protocol_config={host_key:data.ssh_host_key.trim(),terminal_title:data.ssh_terminal_title.trim()||'Secure shell'};else if(data.protocol==='rdp')data.protocol_config={...data.protocol_config,certificate_mode:data.rdp_certificate_mode}; delete data.ssh_host_key;delete data.ssh_terminal_title;delete data.rdp_certificate_mode; submitData(event.target,'/connections',data); };
 $('#perm-subject-type').onchange = fillSelectors;
 
 const protocolDefaults = {
-  rdp:{port:3389,config:{fullscreen:true,dynamic_resolution:true,audio:true,clipboard:false}},
+  rdp:{port:3389,config:{fullscreen:true,dynamic_resolution:true,audio:true,clipboard:false,certificate_mode:'tofu'}},
   vnc:{port:5900,config:{fullscreen:true,shared:true,view_only:false,clipboard:false}},
-  ssh:{port:22,config:{host_key:'ssh-ed25519 REPLACE_WITH_VERIFIED_SERVER_PUBLIC_KEY',terminal_title:'Secure shell'}},
+  ssh:{port:22,config:{host_key:'',terminal_title:'Secure shell'}},
   moonlight:{port:47984,config:{application:'Desktop',width:1920,height:1080,fps:60,bitrate_kbps:20000,audio:true,gamepad:true}},
   mock:{port:1,config:{}}
 };
-$('#connection-protocol').onchange = event => { const defaults=protocolDefaults[event.target.value]; $('#connection-form [name=port]').value=defaults.port; $('#connection-form [name=protocol_config]').value=JSON.stringify(defaults.config,null,2); };
+$('#connection-protocol').onchange = event => { const defaults=protocolDefaults[event.target.value]; $('#connection-form [name=port]').value=defaults.port; $('#connection-form [name=protocol_config]').value=JSON.stringify(defaults.config,null,2); syncConnectionFields(); fillConnectionCredentialOptions(''); };
+
+async function submitData(form,path,data){try{const result=await api(path,{method:'POST',body:JSON.stringify(data)});form.reset();syncConnectionFields();syncCredentialFields();await refresh();if(path==='/connections'&&result?.id){showView('access');$('#perm-connection').value=String(result.id);fillPermissionCredentialOptions('');note('Connection saved — now assign it to a person or group');}else note('Saved');}catch(error){note(error.message,true);}}
+async function submitCredential(form,data){return submitData(form,'/credentials',data);}
+function credentialsForProtocol(protocol){return state.credentials.filter(item=>item.secret_type!=='ssh_private_key'||protocol==='ssh');}
+function optionsForCredentials(items){return items.map(item=>`<option value="${item.id}">${esc(item.name)} · ${esc(item.username||'no username')}</option>`).join('');}
+function fillConnectionCredentialOptions(selected=$('#connection-credential').value){const select=$('#connection-credential'),items=credentialsForProtocol($('#connection-protocol').value);select.innerHTML='<option value="">No stored credential</option>'+optionsForCredentials(items);if([...select.options].some(option=>option.value===String(selected)))select.value=String(selected);}
+function fillPermissionCredentialOptions(selected=$('#perm-credential').value){const connection=state.connections.find(item=>String(item.id)===$('#perm-connection').value),items=credentialsForProtocol(connection?.protocol||'');const select=$('#perm-credential');select.innerHTML='<option value="">Use connection default</option>'+optionsForCredentials(items);if([...select.options].some(option=>option.value===String(selected)))select.value=String(selected);}
+function syncConnectionFields(){const protocol=$('#connection-protocol').value,ssh=protocol==='ssh';$('#ssh-host-key-field').hidden=!ssh;$('#ssh-title-field').hidden=!ssh;$('#rdp-certificate-field').hidden=protocol!=='rdp';$('#protocol-config-field').hidden=ssh;$('#connection-form [name=ssh_host_key]').required=ssh;}
+function syncCredentialFields(){const type=$('#credential-type').value;$('#credential-password-field').hidden=type!=='password';$('#credential-key-field').hidden=type!=='ssh_private_key';$('#credential-form [name=password]').required=type==='password';$('#credential-form [name=private_key]').required=type==='ssh_private_key';}
+$('#credential-type').onchange=syncCredentialFields;
+$('#perm-connection').onchange=()=>fillPermissionCredentialOptions('');
 
 function ask(title, fields = [], confirmLabel = 'Save changes', message = '') {
   return new Promise(resolve => {
@@ -179,19 +192,29 @@ function ask(title, fields = [], confirmLabel = 'Save changes', message = '') {
 async function update(path, body, message='Updated') { try { await api(path,{method:'PUT',body:JSON.stringify(body)}); await refresh(); note(message); } catch(error){note(error.message,true);} }
 async function removeItem(path) { const answer=await ask('Delete item',[],'Delete','This cannot be undone.'); if(answer===null)return; try{await api(path,{method:'DELETE'});await refresh();note('Deleted');}catch(error){note(error.message,true);} }
 
-function credentialOptions(selected) { return [{label:'No stored credential',value:''},...state.credentials.map(item=>({label:`${item.name} · ${item.username||'no username'}`,value:String(item.id)}))].map(option=>({...option,value:option.value,label:option.label})); }
+function credentialOptions(selected,protocol) { return [{label:'No stored credential',value:''},...credentialsForProtocol(protocol).map(item=>({label:`${item.name} · ${item.username||'no username'}`,value:String(item.id)}))].map(option=>({...option,value:option.value,label:option.label})); }
 
 async function handleAction(button) {
   const id=Number(button.dataset.id), action=button.dataset.action;
   const user=state.users.find(x=>x.id===id), connection=state.connections.find(x=>x.id===id), group=state.groups.find(x=>x.id===id), credential=state.credentials.find(x=>x.id===id), device=state.devices.find(x=>x.id===id);
   if(action==='delete') return removeItem(button.dataset.path);
+  if(action==='assign-user'){showView('access');$('#perm-subject-type').value='user';fillSelectors();$('#perm-subject').value=String(id);$('#perm-connection').focus();return;}
+  if(action==='assign-group'){showView('access');$('#perm-subject-type').value='group';fillSelectors();$('#perm-subject').value=String(id);$('#perm-connection').focus();return;}
+  if(action==='assign-connection'){showView('access');$('#perm-connection').value=String(id);fillPermissionCredentialOptions('');$('#perm-subject').focus();return;}
+  if(action==='remove-assignment'){const answer=await ask('Remove access',[],'Remove','This person or group will no longer be able to launch the connection.');if(answer===null)return;try{await api('/permissions',{method:'POST',body:JSON.stringify({subject_type:button.dataset.subjectType,subject_id:Number(button.dataset.subjectId),connection_id:Number(button.dataset.connectionId),can_launch:false,credential_id:null})});await refresh();note('Access removed');}catch(error){note(error.message,true);}return;}
   if(action==='toggle-user') return update('/users/'+id,{display_name:user.display_name,is_admin:user.is_admin,enabled:!user.enabled,password:''},user.enabled?'Account disabled':'Account enabled');
   if(action==='edit-user') { const data=await ask('Edit person',[{name:'display_name',label:'Display name',value:user.display_name,required:true},{name:'password',label:'New password (leave blank to keep current)',type:'password',minLength:8},{name:'is_admin',label:'Administrator',type:'checkbox',value:user.is_admin},{name:'enabled',label:'Active account',type:'checkbox',value:user.enabled}]); if(data)return update('/users/'+id,data); }
   if(action==='policy') return openPolicy(id);
   if(action==='edit-group') { const data=await ask('Edit group',[{name:'name',label:'Group name',value:group.name,required:true},{name:'description',label:'Description',value:group.description||'',multiline:true}]); if(data)return update('/groups/'+id,data); }
   if(action==='toggle-connection') return update('/connections/'+id,{...connection,protocol_config:JSON.parse(connection.protocol_config_json||'{}'),enabled:!connection.enabled},connection.enabled?'Connection disabled':'Connection enabled');
-  if(action==='edit-connection') { const protocols=[{label:'Windows / Linux RDP',value:'rdp'},{label:'Linux desktop (VNC)',value:'vnc'},{label:'Moonlight / Sunshine',value:'moonlight'}]; if(state.dashboard.dev_mode)protocols.push({label:'Demo session',value:'mock'}); const data=await ask('Configure connection',[{name:'name',label:'Name',value:connection.name,required:true},{name:'description',label:'Description',value:connection.description||''},{name:'protocol',label:'Type',value:connection.protocol,options:protocols},{name:'host',label:'Host',value:connection.host,required:true},{name:'port',label:'Port',type:'number',value:connection.port,min:1,max:65535,required:true},{name:'credential_id',label:'Default credential',value:String(connection.credential_id||''),options:credentialOptions(connection.credential_id)},{name:'enabled',label:'Available',type:'checkbox',value:connection.enabled},{name:'protocol_config',label:'Advanced settings (JSON)',value:connection.protocol_config_json||'{}',multiline:true}]); if(data)return update('/connections/'+id,{...connection,...data,port:Number(data.port),credential_id:data.credential_id?Number(data.credential_id):null,protocol_config:JSON.parse(data.protocol_config),enabled:data.enabled}); }
-  if(action==='replace-credential') { const data=await ask('Replace credential',[{name:'username',label:'Remote username (blank preserves current)',value:credential.username||''},{name:'secret',label:'New password',type:'password',required:true}]); if(data)return update('/credentials/'+id,data,'Credential replaced'); }
+  if(action==='edit-connection') {
+    const protocols=[{label:'Windows / Linux RDP',value:'rdp'},{label:'Linux desktop (VNC)',value:'vnc'},{label:'Linux command line (locked SSH)',value:'ssh'},{label:'Moonlight / Sunshine',value:'moonlight'}];
+    if(state.dashboard.dev_mode)protocols.push({label:'Demo session',value:'mock'});
+    const config=JSON.parse(connection.protocol_config_json||'{}');
+    const data=await ask('Configure connection',[{name:'name',label:'Name',value:connection.name,required:true},{name:'description',label:'Description',value:connection.description||''},{name:'protocol',label:'Type',value:connection.protocol,options:protocols},{name:'host',label:'Host',value:connection.host,required:true},{name:'port',label:'Port',type:'number',value:connection.port,min:1,max:65535,required:true},{name:'credential_id',label:'Default credential',value:String(connection.credential_id||''),options:credentialOptions(connection.credential_id,connection.protocol)},{name:'enabled',label:'Available',type:'checkbox',value:connection.enabled},{name:'rdp_certificate_mode',label:'RDP certificate validation',value:config.certificate_mode||'tofu',options:[{label:'Trust on first connection, then pin',value:'tofu'},{label:'Require already trusted certificate',value:'deny'},{label:'Ignore validation (unsafe)',value:'ignore'}]},{name:'ssh_host_key',label:'Verified SSH server host public key (SSH only)',value:config.host_key||'',multiline:true},{name:'ssh_terminal_title',label:'Terminal title (SSH only)',value:config.terminal_title||'Secure shell'},{name:'protocol_config',label:'Advanced settings (non-SSH JSON)',value:connection.protocol_config_json||'{}',multiline:true}]);
+    if(data){const parsed=JSON.parse(data.protocol_config),protocolConfig=data.protocol==='ssh'?{host_key:data.ssh_host_key.trim(),terminal_title:data.ssh_terminal_title.trim()||'Secure shell'}:data.protocol==='rdp'?{...parsed,certificate_mode:data.rdp_certificate_mode}:parsed;delete data.ssh_host_key;delete data.ssh_terminal_title;delete data.rdp_certificate_mode;return update('/connections/'+id,{...connection,...data,port:Number(data.port),credential_id:data.credential_id?Number(data.credential_id):null,protocol_config:protocolConfig,enabled:data.enabled});}
+  }
+  if(action==='replace-credential') { const isKey=credential.secret_type==='ssh_private_key';const data=await ask('Replace credential',[{name:'username',label:'Remote username (blank preserves current)',value:credential.username||''},{name:'secret',label:isKey?'New SSH private key':'New password',type:isKey?'text':'password',multiline:isKey,required:true}]); if(data)return update('/credentials/'+id,data,'Credential replaced'); }
   if(action==='rename-device') { const data=await ask('Rename device',[{name:'name',label:'Device name',value:device.name,required:true}]); if(data)return update('/devices/'+id,{name:data.name}); }
   if(action==='toggle-device') { if(device.enabled){const answer=await ask('Revoke device',[],'Revoke','It will no longer be able to launch sessions.');if(answer===null)return;} return update('/devices/'+id,{enabled:!device.enabled},device.enabled?'Device revoked':'Device restored'); }
 }
@@ -213,5 +236,22 @@ $('#policy-form').onsubmit=async event=>{event.preventDefault();let mask=0;docum
 
 $('#audit-filter').oninput=event=>{const query=event.target.value.trim().toLowerCase();document.querySelectorAll('#audit-body tr').forEach(row=>row.hidden=!!query&&!row.dataset.search.includes(query));};
 
+$('#return-client').onclick=async event=>{
+  const button=event.currentTarget;
+  button.disabled=true;
+  button.textContent='Returning…';
+  try {
+    await fetch('/api/v1/auth/logout',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:'{}'});
+  } catch (_) {}
+  window.close();
+  window.setTimeout(()=>{
+    button.disabled=false;
+    button.textContent='Close with Alt+F4';
+    note('Administration signed out. Press Alt+F4 to return to ThinPi.');
+  },500);
+};
+
+syncConnectionFields();
+syncCredentialFields();
 refresh();
 setInterval(refresh,30000);

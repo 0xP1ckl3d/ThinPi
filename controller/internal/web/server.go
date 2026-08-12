@@ -575,7 +575,7 @@ func (s *Server) adminCreate(w http.ResponseWriter, r *http.Request) {
 			ProtocolConfig json.RawMessage `json:"protocol_config"`
 			CredentialID   *int64          `json:"credential_id"`
 		}
-		if decode(r, &q) == nil && validLabel(q.Name, 128) && len(q.Description) <= 1024 && len(q.Icon) <= 128 && s.validProtocol(q.Protocol) && validHost(q.Host) && q.Port > 0 && q.Port < 65536 && validProtocolConfig(q.Protocol, q.ProtocolConfig) {
+		if decode(r, &q) == nil && validLabel(q.Name, 128) && len(q.Description) <= 1024 && len(q.Icon) <= 128 && s.validProtocol(q.Protocol) && validHost(q.Host) && q.Port > 0 && q.Port < 65536 && validProtocolConfig(q.Protocol, q.ProtocolConfig) && s.credentialAllowedForProtocol(r.Context(), q.CredentialID, q.Protocol) {
 			var x sql.Result
 			x, err = s.Store.DB.ExecContext(r.Context(), `INSERT INTO connections(name,description,protocol,host,port,enabled,icon,sort_order,protocol_config_json,credential_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, q.Name, q.Description, q.Protocol, q.Host, q.Port, q.Enabled, q.Icon, q.SortOrder, string(q.ProtocolConfig), q.CredentialID, now, now)
 			if err == nil {
@@ -632,7 +632,12 @@ func (s *Server) adminCreate(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if q.CanLaunch {
-			_, err = s.Store.DB.ExecContext(r.Context(), fmt.Sprintf(`INSERT INTO %s(%s,connection_id,can_launch,credential_id) VALUES(?,?,1,?) ON CONFLICT(%s,connection_id) DO UPDATE SET can_launch=1,credential_id=excluded.credential_id`, table, col, col), q.SubjectID, q.ConnectionID, q.CredentialID)
+			var protocol string
+			if lookupErr := s.Store.DB.QueryRowContext(r.Context(), `SELECT protocol FROM connections WHERE id=?`, q.ConnectionID).Scan(&protocol); lookupErr != nil || !s.credentialAllowedForProtocol(r.Context(), q.CredentialID, protocol) {
+				err = errors.New("credential is not compatible with the connection")
+			} else {
+				_, err = s.Store.DB.ExecContext(r.Context(), fmt.Sprintf(`INSERT INTO %s(%s,connection_id,can_launch,credential_id) VALUES(?,?,1,?) ON CONFLICT(%s,connection_id) DO UPDATE SET can_launch=1,credential_id=excluded.credential_id`, table, col, col), q.SubjectID, q.ConnectionID, q.CredentialID)
+			}
 		} else {
 			_, err = s.Store.DB.ExecContext(r.Context(), fmt.Sprintf(`DELETE FROM %s WHERE %s=? AND connection_id=?`, table, col), q.SubjectID, q.ConnectionID)
 		}
@@ -714,7 +719,7 @@ func (s *Server) adminUpdate(w http.ResponseWriter, r *http.Request) {
 			ProtocolConfig json.RawMessage `json:"protocol_config"`
 			CredentialID   *int64          `json:"credential_id"`
 		}
-		if decode(r, &q) != nil || !validLabel(q.Name, 128) || len(q.Description) > 1024 || len(q.Icon) > 128 || !s.validProtocol(q.Protocol) || !validHost(q.Host) || q.Port < 1 || q.Port > 65535 || !validProtocolConfig(q.Protocol, q.ProtocolConfig) {
+		if decode(r, &q) != nil || !validLabel(q.Name, 128) || len(q.Description) > 1024 || len(q.Icon) > 128 || !s.validProtocol(q.Protocol) || !validHost(q.Host) || q.Port < 1 || q.Port > 65535 || !validProtocolConfig(q.Protocol, q.ProtocolConfig) || !s.credentialAllowedForProtocol(r.Context(), q.CredentialID, q.Protocol) {
 			err = errors.New("invalid")
 		} else {
 			_, err = s.Store.DB.ExecContext(r.Context(), `UPDATE connections SET name=?,description=?,protocol=?,host=?,port=?,enabled=?,icon=?,sort_order=?,protocol_config_json=?,credential_id=?,updated_at=? WHERE id=?`, q.Name, q.Description, q.Protocol, q.Host, q.Port, q.Enabled, q.Icon, q.SortOrder, string(q.ProtocolConfig), q.CredentialID, now, id)
@@ -727,15 +732,7 @@ func (s *Server) adminUpdate(w http.ResponseWriter, r *http.Request) {
 		if decode(r, &q) != nil || q.Secret == "" {
 			err = errors.New("invalid")
 		} else {
-			var encrypted []byte
-			encrypted, err = s.Store.Vault.Encrypt([]byte(q.Secret))
-			if err == nil {
-				if q.Username == "" {
-					_, err = s.Store.DB.ExecContext(r.Context(), `UPDATE credentials SET encrypted_secret=?,updated_at=? WHERE id=?`, encrypted, now, id)
-				} else {
-					_, err = s.Store.DB.ExecContext(r.Context(), `UPDATE credentials SET username=?,encrypted_secret=?,updated_at=? WHERE id=?`, q.Username, encrypted, now, id)
-				}
-			}
+			err = s.Store.ReplaceCredential(r.Context(), id, q.Username, q.Secret)
 		}
 	case "devices":
 		var q struct {
@@ -804,6 +801,18 @@ func (s *Server) adminDelete(w http.ResponseWriter, r *http.Request) {
 func (s *Server) validProtocol(p string) bool {
 	return p == "rdp" || p == "moonlight" || p == "vnc" || p == "ssh" || s.Dev && p == "mock"
 }
+
+func (s *Server) credentialAllowedForProtocol(ctx context.Context, credentialID *int64, protocol string) bool {
+	if credentialID == nil {
+		return true
+	}
+	var kind string
+	if err := s.Store.DB.QueryRowContext(ctx, `SELECT secret_type FROM credentials WHERE id=?`, *credentialID).Scan(&kind); err != nil {
+		return false
+	}
+	return kind != "ssh_private_key" || protocol == "ssh"
+}
+
 func validProtocolConfig(protocol string, raw json.RawMessage) bool {
 	if !json.Valid(raw) {
 		return false

@@ -602,17 +602,24 @@ Required:
 
 Open the controller admin panel. Work in this exact order:
 
-1. **Credentials** — create the remote username and password by a descriptive
-   label. Users never see the secret.
+1. **Credentials** — create the remote username with either a password or an
+   SSH private key under a descriptive label. Users never see the secret.
 2. **Connections** — create RDP, VNC, SSH, or Moonlight target and optionally
    choose a default credential.
 3. **People** — create each ThinPi login. Mark only trusted operators as
    Administrator.
 4. **Groups** — optional shared roles.
-5. **Access rules** — assign a connection to a person/group and select its
-   credential override.
+5. Assign access from either side: select **Assign connections** on a Person or
+   Group, or **Assign access** on a Connection. The form opens with that item
+   preselected; choose the other side and an optional credential override.
 6. **Restrictions** — set days, hours, daily limit, session limit and timezone.
-7. **Devices** — confirm the Pi has a recent heartbeat.
+7. **Devices** — confirm the VM, mini PC, generic device, or Pi has a recent heartbeat.
+
+For RDP, leave **RDP server certificate** at **Trust on first connection, then
+pin** for the normal private-network/self-signed case. ThinPi accepts the first
+certificate without an impossible kiosk prompt and rejects later certificate
+changes. Use **Require an already trusted certificate** for PKI-managed hosts.
+The unsafe ignore option exists only for deliberate troubleshooting.
 
 ### Creating a locked SSH connection
 
@@ -636,19 +643,14 @@ ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI...
 
 In ThinPi:
 
-1. create a credential containing the remote SSH username and password;
+1. create a credential containing either the remote SSH username/password or
+   the remote username/private key;
 2. create a **Linux command line (locked SSH)** connection;
 3. set host and port;
-4. replace the example key in Advanced settings:
-
-   ```json
-   {
-     "host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI...",
-     "terminal_title": "School Linux server"
-   }
-   ```
-
-5. assign it to the intended person with that credential.
+4. paste the verified public key into **Verified SSH server host public key**;
+5. optionally set the terminal title;
+6. select **Assign access**, choose the intended person/group and credential,
+   then save the rule.
 
 ThinPi refuses an SSH connection without a pinned host key. It also disables
 local commands, escape commands, agent/X11/TCP forwarding, user SSH config,
@@ -682,7 +684,7 @@ sh scripts/deploy-pi.sh piadmin@thinpi-living-room
 2. Select **Local maintenance**.
 3. Read and accept the confirmation.
 4. The controller issues a 30-second one-use ticket bound to this Pi.
-5. The root agent validates the ticket and switches to console 2.
+5. The root agent validates the ticket and systemd takes ownership of console 2.
 6. ThinPi signs the launcher out before the switch.
 7. The console opens as the configured `piadmin` OS account.
 8. Use `sudo` when an OS update requires root.

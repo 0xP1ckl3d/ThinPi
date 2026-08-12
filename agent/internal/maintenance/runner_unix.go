@@ -5,6 +5,8 @@ package maintenance
 import (
 	"errors"
 	"os/exec"
+	"strings"
+	"time"
 )
 
 func (b *Broker) start(user string, done func(error)) error {
@@ -12,10 +14,39 @@ func (b *Broker) start(user string, done func(error)) error {
 	if err != nil {
 		return errors.New("systemd maintenance broker is unavailable")
 	}
-	cmd := exec.Command(systemctl, "start", "--no-block", "thinpi-maintenance@"+user+".service")
+	unit := "thinpi-maintenance@" + user + ".service"
+	cmd := exec.Command(systemctl, "start", "--no-block", unit)
 	if err = cmd.Run(); err != nil {
 		return errors.New("could not open the maintenance console")
 	}
-	done(nil)
+
+	// A queued systemd job is not proof that the VT was opened. Give the unit
+	// enough time to fail, then only report success while its interactive shell
+	// is genuinely running.
+	time.Sleep(500 * time.Millisecond)
+	state, err := systemdUnitState(systemctl, unit)
+	if err != nil || (state != "activating" && state != "active") {
+		return errors.New("could not open the maintenance console")
+	}
+	go func() {
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+		for range ticker.C {
+			state, stateErr := systemdUnitState(systemctl, unit)
+			if stateErr != nil {
+				done(errors.New("maintenance console state could not be read"))
+				return
+			}
+			if state != "activating" && state != "active" {
+				done(nil)
+				return
+			}
+		}
+	}()
 	return nil
+}
+
+func systemdUnitState(systemctl, unit string) (string, error) {
+	out, err := exec.Command(systemctl, "show", "--property=ActiveState", "--value", unit).Output()
+	return strings.TrimSpace(string(out)), err
 }

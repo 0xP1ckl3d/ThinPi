@@ -1,6 +1,7 @@
 #!/bin/sh
 # shellcheck disable=SC3045
 ulimit -c 0
+xhost +SI:localuser:thinpi >/dev/null 2>&1 || true
 xhost - >/dev/null 2>&1 || true
 xset -dpms
 xset s off

@@ -14,7 +14,7 @@ OUT="$ROOT/bin/packages"; mkdir -p "$OUT"
 for package in agent launcher; do
   STAGE=$(mktemp -d)
   mkdir -p "$STAGE/DEBIAN" "$STAGE/usr/bin"
-  if [ "$package" = agent ]; then BIN="$ROOT/bin/$ARCH/thinpi-agent"; NAME=thinpi-agent; DESC="ThinPi secure native-client agent"; DEPENDS="ca-certificates"; else BIN="$ROOT/build/launcher-$ARCH/thinpi-launcher"; NAME=thinpi-launcher; DESC="ThinPi Qt kiosk launcher"; DEPENDS="libqt6core6t64 | libqt6core6, libqt6gui6, libqt6network6, libqt6qml6, libqt6quick6, libqt6quickcontrols2-6, qml6-module-qtquick, qml6-module-qtquick-controls, qml6-module-qtquick-layouts, qml6-module-qtquick-window, xinit, matchbox-window-manager"; fi
+  if [ "$package" = agent ]; then BIN="$ROOT/bin/$ARCH/thinpi-agent"; NAME=thinpi-agent; DESC="ThinPi secure native-client agent"; DEPENDS="ca-certificates"; else BIN="$ROOT/build/launcher-$ARCH/thinpi-launcher"; NAME=thinpi-launcher; DESC="ThinPi Qt kiosk launcher"; DEPENDS="jq, libqt6core6t64 | libqt6core6, libqt6gui6, libqt6network6, libqt6qml6, libqt6quick6, libqt6quickcontrols2-6, qml6-module-qtquick, qml6-module-qtquick-controls, qml6-module-qtquick-layouts, qml6-module-qtquick-window, xinit, matchbox-window-manager"; fi
   install -m 0755 "$BIN" "$STAGE/usr/bin/$NAME"
   if [ "$package" = agent ]; then
     mkdir -p "$STAGE/lib/systemd/system" "$STAGE/usr/share/thinpi"
@@ -27,6 +27,7 @@ for package in agent launcher; do
     install -m 0644 "$ROOT/deploy/client/thinpi.target" "$STAGE/lib/systemd/system/"
     install -m 0755 "$ROOT/deploy/client/xinitrc" "$STAGE/usr/local/libexec/thinpi-xinitrc"
     install -m 0755 "$ROOT/deploy/client/maintenance-session.sh" "$STAGE/usr/local/libexec/thinpi-maintenance-session"
+    install -m 0755 "$ROOT/deploy/client/browser-policy.sh" "$STAGE/usr/local/libexec/thinpi-browser-policy"
     install -m 0644 "$ROOT/deploy/client/hardening/Xwrapper.config" "$STAGE/etc/X11/Xwrapper.config"
     install -m 0644 "$ROOT/deploy/client/hardening/10-thinpi-kiosk.conf" "$STAGE/etc/X11/xorg.conf.d/10-thinpi-kiosk.conf"
   fi

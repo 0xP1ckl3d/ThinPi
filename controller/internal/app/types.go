@@ -46,6 +46,7 @@ type LaunchManifest struct {
 	Port              int             `json:"port"`
 	Username          string          `json:"username,omitempty"`
 	Password          string          `json:"password,omitempty"`
+	CredentialType    string          `json:"credential_type,omitempty"`
 	Config            json.RawMessage `json:"config"`
 	MaxSessionSeconds int             `json:"max_session_seconds,omitempty"`
 }

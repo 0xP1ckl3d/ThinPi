@@ -104,7 +104,7 @@ if (-not $ready) {
 Write-Host "Building the Windows agent..."
 Push-Location (Join-Path $root "agent")
 try {
-    & go build -trimpath -o $agentExe .\cmd\thinpi-agent
+    & go build -buildvcs=false -trimpath -o $agentExe .\cmd\thinpi-agent
     Assert-NativeSuccess "Agent build"
 } finally {
     Pop-Location

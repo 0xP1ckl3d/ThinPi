@@ -26,6 +26,10 @@ LAUNCHER_VERSION=$(dpkg-deb -f "$LAUNCHER_PACKAGE" Version)
 [ "$AGENT_VERSION" = "$LAUNCHER_VERSION" ] || { echo "Agent and launcher versions must match" >&2; exit 2; }
 
 apt-get install -y "$AGENT_PACKAGE" "$LAUNCHER_PACKAGE"
+if [ -x /usr/local/libexec/thinpi-browser-policy ] && [ -r /etc/thinpi/ui.env ]; then
+  CONTROLLER_URL=$(sed -n 's/^THINPI_API_URL=//p' /etc/thinpi/ui.env | sed -n '1p')
+  [ -z "$CONTROLLER_URL" ] || /usr/local/libexec/thinpi-browser-policy "$CONTROLLER_URL"
+fi
 systemctl daemon-reload
 systemctl restart thinpi-agent thinpi-ui
 systemctl --no-pager --full status thinpi-agent thinpi-ui

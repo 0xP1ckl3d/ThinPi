@@ -46,6 +46,7 @@ Errors are stable and safe for users:
 Admin resources are `dashboard`, `users`, `groups`, `connections`,
 `credentials`, `devices`, `audit`, `policies`, `permissions`, `memberships`, and
 `enrolment-tokens`. Stored secret values never appear in list responses.
+Credential types are `password`, `username_only`, and `ssh_private_key`.
 
 Browser navigation routes return redirects. API routes never return HTML login
 pages: an expired bearer/cookie session receives JSON 401, and the admin

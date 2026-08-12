@@ -107,6 +107,9 @@ func (PlatformRunner) Run(ctx context.Context, c Command) error {
 		}
 	}
 	cmd := exec.CommandContext(ctx, c.Path, args...)
+	output := &boundedOutput{limit: 32768}
+	cmd.Stdout = output
+	cmd.Stderr = output
 	if c.Stdin != "" {
 		cmd.Stdin = strings.NewReader(c.Stdin)
 	}
@@ -121,5 +124,49 @@ func (PlatformRunner) Run(ctx context.Context, c Command) error {
 		cmd.Env = append(os.Environ(), "HOME="+sessionHome, "USER=thinpi", "LOGNAME=thinpi", "THINPI_SESSION_HOME="+sessionHome)
 		cmd.Env = append(cmd.Env, c.Env...)
 	}
-	return cmd.Run()
+	err := cmd.Run()
+	if err != nil && ctx.Err() == nil {
+		return classifyClientFailure(output.String())
+	}
+	return err
+}
+
+type boundedOutput struct {
+	limit int
+	data  []byte
+}
+
+func (b *boundedOutput) Write(p []byte) (int, error) {
+	written := len(p)
+	b.data = append(b.data, p...)
+	if len(b.data) > b.limit {
+		b.data = append([]byte(nil), b.data[len(b.data)-b.limit:]...)
+	}
+	return written, nil
+}
+
+func (b *boundedOutput) String() string { return string(b.data) }
+
+func classifyClientFailure(output string) error {
+	upper := strings.ToUpper(output)
+	switch {
+	case strings.Contains(upper, "FAILED TO OPEN DISPLAY") || strings.Contains(upper, "CANNOT OPEN DISPLAY"):
+		return &ClientRuntimeError{Message: "The remote client could not access the ThinPi display. Restart the ThinPi UI and try again."}
+	case strings.Contains(upper, "ERRCONNECT_LOGON_FAILURE") || strings.Contains(upper, "STATUS_LOGON_FAILURE") || strings.Contains(upper, "AUTHENTICATION FAILURE"):
+		return &ClientRuntimeError{Message: "The remote system rejected the assigned username or password."}
+	case strings.Contains(upper, "PASSWORD_EXPIRED"):
+		return &ClientRuntimeError{Message: "The assigned remote password has expired."}
+	case strings.Contains(upper, "ACCOUNT_LOCKED"):
+		return &ClientRuntimeError{Message: "The assigned remote account is locked."}
+	case strings.Contains(upper, "CERTIFICATE") && (strings.Contains(upper, "MISMATCH") || strings.Contains(upper, "CHANGED")):
+		return &ClientRuntimeError{Message: "The remote system certificate changed. An administrator must verify it before reconnecting."}
+	case strings.Contains(upper, "ERRCONNECT_TLS_CONNECT_FAILED"):
+		return &ClientRuntimeError{Message: "The remote system rejected the secure RDP handshake. Check its TLS and RDP security settings."}
+	case strings.Contains(upper, "ERRCONNECT_CONNECT_TRANSPORT_FAILED") || strings.Contains(upper, "CONNECTION REFUSED") || strings.Contains(upper, "NO ROUTE TO HOST"):
+		return &ClientRuntimeError{Message: "The ThinPi client could not reach the configured remote host and port."}
+	case strings.Contains(upper, "COMMAND LINE") && (strings.Contains(upper, "ERROR") || strings.Contains(upper, "FAILED")):
+		return &ClientRuntimeError{Message: "The installed remote client rejected this connection configuration."}
+	default:
+		return &ClientRuntimeError{Message: "The remote client exited unexpectedly. An administrator can inspect: journalctl -b -u thinpi-agent"}
+	}
 }

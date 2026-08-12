@@ -26,6 +26,11 @@ grep -F 'amd64|arm64' "$ROOT/deploy/client/provision.sh" >/dev/null
 grep -F '24.04|26.04' "$ROOT/deploy/client/lib/platform.sh" >/dev/null
 grep -F 'google-chrome-stable' "$ROOT/deploy/client/provision.sh" >/dev/null
 grep -F 'THINPI_ADMIN_BROWSER' "$ROOT/deploy/client/provision.sh" >/dev/null
+grep -F 'thinpi-browser-policy' "$ROOT/deploy/client/provision.sh" >/dev/null
+grep -F 'URLAllowlist:[$controller]' "$ROOT/deploy/client/browser-policy.sh" >/dev/null
+! grep -F '($controller+"/*")' "$ROOT/deploy/client/browser-policy.sh" >/dev/null
+grep -F 'xhost +SI:localuser:thinpi' "$ROOT/deploy/client/xinitrc" >/dev/null
+grep -F 'TTYPath=/dev/tty2' "$ROOT/deploy/client/thinpi-maintenance@.service" >/dev/null
 grep -F 'pipewire-audio pipewire-alsa pipewire-pulse' "$ROOT/deploy/client/provision.sh" >/dev/null
 grep -F 'bash /tmp/moonlight-repo.sh' "$ROOT/deploy/client/provision.sh" >/dev/null
 grep -F "THINPI_OS_VERSION\" = 26.04" "$ROOT/deploy/client/provision.sh" >/dev/null

@@ -240,6 +240,7 @@ install -d -o root -g root -m 0755 /usr/local/libexec /etc/X11/xorg.conf.d \
   /etc/chromium/policies/managed /etc/opt/chrome/policies/managed
 install -m 0755 "$SCRIPT_DIR/xinitrc" /usr/local/libexec/thinpi-xinitrc
 install -m 0755 "$SCRIPT_DIR/maintenance-session.sh" /usr/local/libexec/thinpi-maintenance-session
+install -m 0755 "$SCRIPT_DIR/browser-policy.sh" /usr/local/libexec/thinpi-browser-policy
 install -m 0644 "$SCRIPT_DIR/hardening/Xwrapper.config" /etc/X11/Xwrapper.config
 install -m 0644 "$SCRIPT_DIR/hardening/10-thinpi-kiosk.conf" /etc/X11/xorg.conf.d/10-thinpi-kiosk.conf
 install -m 0644 "$SCRIPT_DIR/hardening/99-thinpi-ssh.conf" /etc/ssh/sshd_config.d/99-thinpi.conf
@@ -262,12 +263,7 @@ jq -n --arg controller "$SERVER" --arg maintenance_user "$ADMIN_USER" --arg ca "
 chmod 0640 /etc/thinpi/agent.json
 printf 'THINPI_API_URL=%s\nTHINPI_ADMIN_BROWSER=%s\n' "$SERVER" "$ADMIN_BROWSER" > /etc/thinpi/ui.env
 chmod 0644 /etc/thinpi/ui.env
-POLICY_FILE=/tmp/thinpi-browser-policy.json
-jq -n --arg controller "${SERVER%/}" \
-  '{URLBlocklist:["*"],URLAllowlist:[($controller+"/*")],AllowDinosaurEasterEgg:false,AllowFileSelectionDialogs:false,BookmarkBarEnabled:false,BrowserAddPersonEnabled:false,BrowserGuestModeEnabled:false,BrowserSignin:0,DefaultBrowserSettingEnabled:false,DefaultPopupsSetting:2,DeveloperToolsAvailability:2,DownloadRestrictions:3,EditBookmarksEnabled:false,ExtensionInstallBlocklist:["*"],ExternalProtocolDialogShowAlwaysOpenCheckbox:false,IncognitoModeAvailability:1,PasswordManagerEnabled:false,PrintingEnabled:false,SavingBrowserHistoryDisabled:true,SyncDisabled:true}' > "$POLICY_FILE"
-install -o root -g root -m 0644 "$POLICY_FILE" /etc/chromium/policies/managed/thinpi.json
-install -o root -g root -m 0644 "$POLICY_FILE" /etc/opt/chrome/policies/managed/thinpi.json
-rm -f "$POLICY_FILE"
+/usr/local/libexec/thinpi-browser-policy "$SERVER"
 if [ -z "$TOKEN" ]; then
   printf 'One-time enrolment token: ' >/dev/tty
   stty -echo </dev/tty

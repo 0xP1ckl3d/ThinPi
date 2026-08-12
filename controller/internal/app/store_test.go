@@ -2,6 +2,9 @@ package app
 
 import (
 	"context"
+	"crypto/ed25519"
+	"crypto/x509"
+	"encoding/pem"
 	"errors"
 	"testing"
 	"time"
@@ -9,6 +12,19 @@ import (
 	"thinpi.local/controller/internal/database"
 	"thinpi.local/controller/internal/security"
 )
+
+func testPrivateKey(t *testing.T) string {
+	t.Helper()
+	_, key, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := x509.MarshalPKCS8PrivateKey(key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: raw}))
+}
 
 func testStore(t *testing.T) *Store {
 	t.Helper()
@@ -164,6 +180,16 @@ func TestCredentialOnlyReturnedOnRedeem(t *testing.T) {
 	}
 	if m.Username != "alice" || m.Password != "top-secret" {
 		t.Fatalf("bad manifest: %#v", m)
+	}
+}
+
+func TestSSHPrivateKeyCredentialValidation(t *testing.T) {
+	s := testStore(t)
+	if _, err := s.CreateCredential(context.Background(), "Linux key", "student", testPrivateKey(t), "ssh_private_key"); err != nil {
+		t.Fatalf("valid private key rejected: %v", err)
+	}
+	if _, err := s.CreateCredential(context.Background(), "Bad key", "student", "not a private key", "ssh_private_key"); err == nil {
+		t.Fatal("invalid private key accepted")
 	}
 }
 

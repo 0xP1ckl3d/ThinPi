@@ -22,11 +22,14 @@ if systemctl list-unit-files thinpi-agent.service --no-legend 2>/dev/null | grep
   sudo install -d -o root -g root -m 0755 /usr/local/libexec /etc/X11/xorg.conf.d /etc/ssh/sshd_config.d
   sudo install -m 0755 /tmp/thinpi/deploy-client/xinitrc /usr/local/libexec/thinpi-xinitrc
   sudo install -m 0755 /tmp/thinpi/deploy-client/maintenance-session.sh /usr/local/libexec/thinpi-maintenance-session
+  sudo install -m 0755 /tmp/thinpi/deploy-client/browser-policy.sh /usr/local/libexec/thinpi-browser-policy
   sudo install -m 0644 /tmp/thinpi/deploy-client/hardening/Xwrapper.config /etc/X11/Xwrapper.config
   sudo install -m 0644 /tmp/thinpi/deploy-client/hardening/10-thinpi-kiosk.conf /etc/X11/xorg.conf.d/10-thinpi-kiosk.conf
   sudo install -m 0644 /tmp/thinpi/deploy-client/hardening/99-thinpi-ssh.conf /etc/ssh/sshd_config.d/99-thinpi.conf
   sudo systemctl daemon-reload
   sudo sshd -t
+  CONTROLLER_URL=$(sed -n 's/^THINPI_API_URL=//p' /etc/thinpi/ui.env | sed -n '1p')
+  [ -z "$CONTROLLER_URL" ] || sudo /usr/local/libexec/thinpi-browser-policy "$CONTROLLER_URL"
   sudo systemctl restart thinpi-agent thinpi-ui
   sudo systemctl --no-pager --full status thinpi-agent thinpi-ui
 else

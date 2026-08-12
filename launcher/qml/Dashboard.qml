@@ -26,15 +26,23 @@ Rectangle {
         id: maintenanceConfirm
         anchors.centerIn: parent
         modal: true
-        title: "Open local maintenance console?"
-        standardButtons: Dialog.Ok | Dialog.Cancel
-        onAccepted: backend.openMaintenance()
-        contentItem: Label {
-            text: "The ThinPi app will sign out and switch to this device's administrator console.\nType exit when maintenance is complete to return to the locked launcher."
-            color: "#e7eef7"
-            wrapMode: Text.Wrap
-            width: 500
-            padding: 18
+        width: 560
+        padding: 24
+        background: Rectangle { color: "#13233a"; radius: 14; border.color: "#294564" }
+        contentItem: ColumnLayout {
+            spacing: 16
+            Label { text: "Open local maintenance console?"; color: "#f4f8ff"; font.pixelSize: 24; font.weight: Font.DemiBold }
+            Label {
+                Layout.fillWidth: true
+                text: "The ThinPi app will sign out and switch to this device's administrator console.\nType exit when maintenance is complete to return to the locked launcher."
+                color: "#c8d6e8"
+                wrapMode: Text.Wrap
+            }
+            RowLayout {
+                Layout.alignment: Qt.AlignRight
+                Button { text: "Cancel"; onClicked: maintenanceConfirm.close() }
+                Button { text: "Open console"; onClicked: { maintenanceConfirm.close(); backend.openMaintenance() } }
+            }
         }
     }
 }

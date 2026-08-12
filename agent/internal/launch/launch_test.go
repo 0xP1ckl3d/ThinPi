@@ -29,6 +29,24 @@ func TestFreeRDPPasswordOnlyInStdin(t *testing.T) {
 	if len(c.Args) != 1 || c.Args[0] != "/args-from:stdin" {
 		t.Fatalf("unsafe argv: %#v", c.Args)
 	}
+	if !strings.Contains(c.Stdin, "/cert:tofu") {
+		t.Fatal("RDP connection can still block on an interactive certificate prompt")
+	}
+}
+
+func TestFreeRDPCertificateModes(t *testing.T) {
+	base := api.Manifest{Protocol: "rdp", Host: "server.example", Port: 3389}
+	for _, mode := range []string{"tofu", "deny", "ignore"} {
+		base.Config = json.RawMessage(`{"certificate_mode":"` + mode + `"}`)
+		command, err := FreeRDPCommand("xfreerdp3", base)
+		if err != nil || !strings.Contains(command.Stdin, "/cert:"+mode) {
+			t.Fatalf("mode %q not enforced: %#v %v", mode, command, err)
+		}
+	}
+	base.Config = json.RawMessage(`{"certificate_mode":"prompt"}`)
+	if _, err := FreeRDPCommand("xfreerdp3", base); err == nil {
+		t.Fatal("interactive certificate mode was accepted")
+	}
 }
 func TestRejectsUnsafeManifest(t *testing.T) {
 	_, err := FreeRDPCommand("xfreerdp", api.Manifest{Host: "host\n/p:injected", Port: 3389, Config: json.RawMessage(`{}`)})
@@ -107,6 +125,21 @@ func TestSSHRejectsMissingOrMalformedPinnedHostKey(t *testing.T) {
 	base.Username = "student -oProxyCommand=sh"
 	if _, err := SSHCommand("xterm", "ssh", "sshpass", base); err == nil {
 		t.Fatal("SSH accepted an unsafe username")
+	}
+}
+
+func TestSSHPrivateKeyUsesProtectedIdentityFile(t *testing.T) {
+	manifest := api.Manifest{Protocol: "ssh", Host: "server.example", Port: 22, Username: "student", Password: "-----BEGIN PRIVATE KEY-----\nprivate material\n-----END PRIVATE KEY-----", CredentialType: "ssh_private_key", Config: json.RawMessage(`{"host_key":"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE4N4OjnVgCJ0eHqCY3YQBMJm1r+4BjJvYX0S2Ctmock"}`)}
+	command, err := SSHCommand("xterm", "ssh", "sshpass", manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(command.Args, " ")
+	if strings.Contains(joined, "private material") || !strings.Contains(joined, "IdentityFile={ssh_identity_file}") || strings.Contains(joined, "sshpass") {
+		t.Fatalf("private key was not isolated: %#v", command)
+	}
+	if len(command.Files) != 2 || command.Files[1].Placeholder != "{ssh_identity_file}" {
+		t.Fatalf("protected identity file missing: %#v", command.Files)
 	}
 }
 
@@ -192,7 +225,7 @@ func TestRunnerFailureIsVisibleToLauncher(t *testing.T) {
 		time.Sleep(time.Millisecond)
 	}
 	status := m.Status()
-	if status.State != Failed || !strings.Contains(status.LastError, "target is reachable") {
+	if status.State != Failed || !strings.Contains(status.LastError, "agent journal") {
 		t.Fatalf("unexpected status: %#v", status)
 	}
 	if strings.Contains(status.LastError, "native diagnostics") {

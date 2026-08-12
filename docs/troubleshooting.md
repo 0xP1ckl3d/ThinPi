@@ -229,14 +229,14 @@ nc -vz SSH_TARGET 22
 sudo journalctl -u thinpi-agent --since '10 minutes ago' --no-pager
 ```
 
-The connection's Advanced settings must contain the verified remote host public
-key as `host_key`, for example `ssh-ed25519 AAAA...`. A missing key fails
-closed. If the server host key changed, verify the new fingerprint through a
-trusted console before updating ThinPi. Do not use `StrictHostKeyChecking=no`.
+The connection's **Verified SSH server host public key** field must contain the
+verified remote public key, for example `ssh-ed25519 AAAA...`. A missing key
+fails closed. If the server host key changed, verify the new fingerprint through
+a trusted console before updating ThinPi. Do not use `StrictHostKeyChecking=no`.
 
-The SSH username comes from the assigned credential. The password uses an
-owner-only temporary file and never appears in process arguments. Exiting the
-remote shell should close xterm and return to the launcher.
+The SSH username and password/private key come from the assigned credential.
+The secret uses an owner-only temporary file and never appears in process
+arguments. Exiting the remote shell should close xterm and return to the launcher.
 
 ### Local maintenance is unavailable
 
@@ -245,14 +245,14 @@ Local maintenance requires all of the following:
 - the launcher user is currently an enabled controller Administrator;
 - the Pi device is enabled and has its device credential;
 - `/etc/thinpi/agent.json` has a non-root `maintenance_user`;
-- `/usr/local/libexec/thinpi-maintenance-session` and `openvt` exist;
+- `/usr/local/libexec/thinpi-maintenance-session` and `chvt` exist;
 - the controller is reachable while the one-use ticket is redeemed.
 
 Check remotely:
 
 ```sh
 sudo jq .maintenance_user /etc/thinpi/agent.json
-command -v openvt
+command -v chvt
 sudo test -x /usr/local/libexec/thinpi-maintenance-session && echo present
 sudo journalctl -u thinpi-agent --since '10 minutes ago' --no-pager
 ```
@@ -284,9 +284,20 @@ xfreerdp3 /help 2>/dev/null | head
 sudo journalctl -u thinpi-agent --since '10 minutes ago' --no-pager
 ```
 
-The installed client must support `/args-from:stdin`. Check target DNS/port,
-remote certificate name, username format, and whether RDP is enabled at the
-host.
+The installed client must support `/args-from:stdin`. In the connection editor,
+set **RDP server certificate** to **Trust on first connection, then pin** for a
+self-signed host; otherwise FreeRDP cannot ask a question inside the kiosk. Also
+check target DNS/port, username format, and whether RDP is enabled at the host.
+
+Verify the native client can access the kiosk X display:
+
+```sh
+sudo -u thinpi env DISPLAY=:0 xset q >/dev/null && echo display-ok
+```
+
+Current agents turn common display, credential, certificate, TLS and transport
+failures into specific launcher messages and record the safe category in the
+agent journal.
 
 ### VNC unavailable
 

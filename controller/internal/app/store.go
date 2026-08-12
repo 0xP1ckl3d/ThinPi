@@ -12,6 +12,8 @@ import (
 	_ "time/tzdata"
 
 	"thinpi.local/controller/internal/security"
+
+	"golang.org/x/crypto/ssh"
 )
 
 var (
@@ -403,7 +405,7 @@ func (s *Store) RedeemLaunchTicket(ctx context.Context, token string, deviceID i
 	if credentialID.Valid {
 		var username sql.NullString
 		var encrypted []byte
-		err = tx.QueryRowContext(ctx, `SELECT username,encrypted_secret FROM credentials WHERE id=?`, credentialID.Int64).Scan(&username, &encrypted)
+		err = tx.QueryRowContext(ctx, `SELECT username,encrypted_secret,secret_type FROM credentials WHERE id=?`, credentialID.Int64).Scan(&username, &encrypted, &m.CredentialType)
 		if err != nil {
 			return LaunchManifest{}, err
 		}
@@ -550,15 +552,19 @@ func (s *Store) audit(ctx context.Context, userID, deviceID *int64, event string
 }
 
 func (s *Store) CreateCredential(ctx context.Context, name, username, secret, kind string) (int64, error) {
-	if kind != "password" && kind != "username_only" {
+	if kind != "password" && kind != "username_only" && kind != "ssh_private_key" {
 		return 0, errors.New("invalid credential type")
 	}
 	name = strings.TrimSpace(name)
-	if name == "" || len(name) > 128 || len(username) > 256 || len(secret) > 4096 || strings.ContainsAny(username, "\r\n\x00") {
+	username = strings.TrimSpace(username)
+	if name == "" || len(name) > 128 || len(username) > 256 || len(secret) > 16384 || strings.ContainsAny(username, "\r\n\x00") || strings.ContainsRune(secret, '\x00') {
 		return 0, errors.New("invalid credential")
 	}
 	if kind == "password" && secret == "" {
 		return 0, errors.New("password credential requires a secret")
+	}
+	if kind == "ssh_private_key" && (username == "" || !validSSHPrivateKey(secret)) {
+		return 0, errors.New("SSH private-key credential requires a username and private key")
 	}
 	var encrypted []byte
 	var err error
@@ -574,6 +580,35 @@ func (s *Store) CreateCredential(ctx context.Context, name, username, secret, ki
 		return 0, err
 	}
 	return r.LastInsertId()
+}
+
+func validSSHPrivateKey(secret string) bool {
+	_, err := ssh.ParsePrivateKey([]byte(strings.TrimSpace(secret)))
+	return err == nil
+}
+
+func (s *Store) ReplaceCredential(ctx context.Context, id int64, username, secret string) error {
+	var kind string
+	var currentUsername sql.NullString
+	if err := s.DB.QueryRowContext(ctx, `SELECT username,secret_type FROM credentials WHERE id=?`, id).Scan(&currentUsername, &kind); err != nil {
+		return err
+	}
+	if strings.TrimSpace(username) == "" {
+		username = currentUsername.String
+	}
+	username = strings.TrimSpace(username)
+	if secret == "" || len(secret) > 16384 || len(username) > 256 || strings.ContainsAny(username, "\r\n\x00") || strings.ContainsRune(secret, '\x00') {
+		return errors.New("invalid credential")
+	}
+	if kind == "ssh_private_key" && (username == "" || !validSSHPrivateKey(secret)) {
+		return errors.New("invalid SSH private key")
+	}
+	encrypted, err := s.Vault.Encrypt([]byte(secret))
+	if err != nil {
+		return err
+	}
+	_, err = s.DB.ExecContext(ctx, `UPDATE credentials SET username=?,encrypted_secret=?,updated_at=? WHERE id=?`, username, encrypted, stamp(s.Now()), id)
+	return err
 }
 
 func (s *Store) SeedDev(ctx context.Context) error {

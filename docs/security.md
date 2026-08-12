@@ -18,13 +18,16 @@
 - The launcher never receives reusable connection secrets or the device token.
 - Protocol fields are validated and translated to direct process arguments.
   There is no shell interpolation and no `extra_args` field.
-- FreeRDP secrets use `/args-from:stdin`; production never adds `/cert:ignore`.
+- FreeRDP secrets use `/args-from:stdin`. RDP certificate handling is explicit
+  and non-interactive: TOFU is the default, strict trust is available, and the
+  deliberately labelled unsafe ignore mode requires an administrator choice.
 - VNC passwords use an ephemeral owner-only TigerVNC password file and are
   never placed in the process arguments. The file is removed after the viewer exits.
 - SSH uses xterm only as a single-child display for OpenSSH. There are no tabs
   or local shell child. Host keys are mandatory and pinned; user config,
   escape/local commands, proxying and every forwarding mode are disabled.
-  Password material uses an ephemeral owner-only file and never appears in argv.
+  Password or private-key material uses an ephemeral owner-only file and never
+  appears in argv.
 - The kiosk account has `nologin`, no sudo rights, no display manager and no
   getty. Xorg blocks VT switching, server termination and mode-switch key
   sequences. The Xorg wrapper permits service launch by a non-console identity,
@@ -37,6 +40,7 @@
   mode with a throwaway profile. Managed policy blocks every origin except the
   controller and disables developer tools, downloads, guest/incognito, sync,
   password storage and printing.
+  Its **Return to ThinPi** control signs out and closes that browser process.
 - Local maintenance requires a short-lived single-use controller ticket bound
   to the administrator and device. The root agent can only switch to the fixed
   preconfigured maintenance account; the local API cannot carry commands.
