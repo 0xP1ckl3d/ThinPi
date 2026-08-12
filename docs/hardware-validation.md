@@ -48,8 +48,8 @@ vcgencmd get_throttled
 | RDP fullscreen | display/input/audio usable; close returns to launcher | Pending host |
 | RDP credential secrecy | password absent from launcher, `ps`, `/proc/*/cmdline`, logs | Pending host |
 | Linux VNC | authentication/display/input work; close returns | Pending host |
-| Locked remote SSH | pinned host accepted; remote shell works; exit returns to launcher | Pending host |
-| SSH wrong host key | connection fails closed with no trust prompt | Pending host |
+| Locked remote SSH | first-use host key recorded; remote shell works; exit returns to launcher | Pending host |
+| SSH changed host key | connection stops; dashboard shows fingerprint and requires explicit replacement approval | Pending host |
 | SSH local escape | no tabs/local shell, OpenSSH escapes, forwarding, logs or argv password | Pending hardware |
 | Device revocation | revoked Pi cannot redeem new launch tickets | Pending hardware |
 | SSH maintenance | configured admin password/key login still works; root/forwarding denied | Pending hardware |

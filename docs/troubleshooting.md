@@ -229,10 +229,10 @@ nc -vz SSH_TARGET 22
 sudo journalctl -u thinpi-agent --since '10 minutes ago' --no-pager
 ```
 
-The connection's **Verified SSH server host public key** field must contain the
-verified remote public key, for example `ssh-ed25519 AAAA...`. A missing key
-fails closed. If the server host key changed, verify the new fingerprint through
-a trusted console before updating ThinPi. Do not use `StrictHostKeyChecking=no`.
+ThinPi records the remote host key automatically on first use. If it changes,
+the dashboard shows the replacement fingerprint and asks whether to trust it.
+Verify an unexpected change through a trusted console before accepting it. Do
+not use `StrictHostKeyChecking=no`.
 
 The SSH username and password/private key come from the assigned credential.
 The secret uses an owner-only temporary file and never appears in process

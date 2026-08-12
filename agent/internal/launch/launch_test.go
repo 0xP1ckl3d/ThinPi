@@ -102,8 +102,8 @@ func TestVNCTLSPlainRejectsNULPassword(t *testing.T) {
 	}
 }
 
-func TestSSHUsesPinnedSinglePurposeTerminalWithoutLocalEscape(t *testing.T) {
-	manifest := api.Manifest{Protocol: "ssh", Name: "Linux shell", Host: "server.example", Port: 22, Username: "student", Password: "ssh-secret", Config: json.RawMessage(`{"host_key":"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE4N4OjnVgCJ0eHqCY3YQBMJm1r+4BjJvYX0S2Ctmock"}`)}
+func TestSSHUsesTrustedSinglePurposeTerminalWithoutLocalEscape(t *testing.T) {
+	manifest := api.Manifest{Protocol: "ssh", Name: "Linux shell", Host: "server.example", Port: 22, Username: "student", Password: "ssh-secret", Config: json.RawMessage(`{"terminal_title":"Secure shell"}`)}
 	command, err := SSHCommand("/usr/bin/xterm", "/usr/bin/ssh", "/usr/bin/sshpass", manifest)
 	if err != nil {
 		t.Fatal(err)
@@ -112,26 +112,24 @@ func TestSSHUsesPinnedSinglePurposeTerminalWithoutLocalEscape(t *testing.T) {
 	if strings.Contains(joined, manifest.Password) || command.Stdin != "" {
 		t.Fatal("SSH password leaked into argv or stdin")
 	}
-	for _, required := range []string{"/usr/bin/xterm", "XTerm*fullscreen: always", "-e /usr/bin/sshpass -f {ssh_password_file} /usr/bin/ssh", "EscapeChar=none", "PermitLocalCommand=no", "DisableForwarding=yes", "StrictHostKeyChecking=yes", "UserKnownHostsFile={known_hosts_file}", "-l student server.example"} {
+	for _, required := range []string{"/usr/bin/xterm", "XTerm*fullscreen: always", "-e /usr/bin/sshpass -f {ssh_password_file} /usr/bin/ssh", "EscapeChar=none", "PermitLocalCommand=no", "ClearAllForwardings=yes", "StrictHostKeyChecking=yes", "UserKnownHostsFile=", "-l student server.example"} {
 		if !strings.Contains(joined, required) {
 			t.Fatalf("missing hardening %q in %q", required, joined)
 		}
 	}
-	if len(command.Files) != 2 || !strings.Contains(command.Files[0].Content, "server.example ssh-ed25519") || command.Files[1].Content != manifest.Password+"\n" {
+	if strings.Contains(joined, "DisableForwarding") {
+		t.Fatal("SSH command contains the sshd-only DisableForwarding option")
+	}
+	if len(command.Files) != 1 || command.Files[0].Content != manifest.Password+"\n" {
 		t.Fatalf("protected SSH files not prepared correctly: %#v", command.Files)
 	}
 }
 
-func TestSSHRejectsMissingOrMalformedPinnedHostKey(t *testing.T) {
+func TestSSHDoesNotRequireConfiguredHostKey(t *testing.T) {
 	base := api.Manifest{Protocol: "ssh", Host: "server.example", Port: 22, Username: "student", Config: json.RawMessage(`{}`)}
-	if _, err := SSHCommand("xterm", "ssh", "sshpass", base); err == nil {
-		t.Fatal("SSH accepted a connection without a pinned host key")
+	if _, err := SSHCommand("xterm", "ssh", "sshpass", base); err != nil {
+		t.Fatalf("SSH still requires an administrator-configured host key: %v", err)
 	}
-	base.Config = json.RawMessage(`{"host_key":"ssh-ed25519 bad\nInjected"}`)
-	if _, err := SSHCommand("xterm", "ssh", "sshpass", base); err == nil {
-		t.Fatal("SSH accepted a malformed pinned host key")
-	}
-	base.Config = json.RawMessage(`{"host_key":"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE4N4OjnVgCJ0eHqCY3YQBMJm1r+4BjJvYX0S2Ctmock"}`)
 	base.Username = "student -oProxyCommand=sh"
 	if _, err := SSHCommand("xterm", "ssh", "sshpass", base); err == nil {
 		t.Fatal("SSH accepted an unsafe username")
@@ -139,7 +137,7 @@ func TestSSHRejectsMissingOrMalformedPinnedHostKey(t *testing.T) {
 }
 
 func TestSSHPrivateKeyUsesProtectedIdentityFile(t *testing.T) {
-	manifest := api.Manifest{Protocol: "ssh", Host: "server.example", Port: 22, Username: "student", Password: "-----BEGIN PRIVATE KEY-----\nprivate material\n-----END PRIVATE KEY-----", CredentialType: "ssh_private_key", Config: json.RawMessage(`{"host_key":"ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE4N4OjnVgCJ0eHqCY3YQBMJm1r+4BjJvYX0S2Ctmock"}`)}
+	manifest := api.Manifest{Protocol: "ssh", Host: "server.example", Port: 22, Username: "student", Password: "-----BEGIN PRIVATE KEY-----\nprivate material\n-----END PRIVATE KEY-----", CredentialType: "ssh_private_key", Config: json.RawMessage(`{}`)}
 	command, err := SSHCommand("xterm", "ssh", "sshpass", manifest)
 	if err != nil {
 		t.Fatal(err)
@@ -148,7 +146,7 @@ func TestSSHPrivateKeyUsesProtectedIdentityFile(t *testing.T) {
 	if strings.Contains(joined, "private material") || !strings.Contains(joined, "IdentityFile={ssh_identity_file}") || strings.Contains(joined, "sshpass") {
 		t.Fatalf("private key was not isolated: %#v", command)
 	}
-	if len(command.Files) != 2 || command.Files[1].Placeholder != "{ssh_identity_file}" {
+	if len(command.Files) != 1 || command.Files[0].Placeholder != "{ssh_identity_file}" {
 		t.Fatalf("protected identity file missing: %#v", command.Files)
 	}
 }

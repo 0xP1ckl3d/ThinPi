@@ -23,6 +23,7 @@ type Server struct {
 type request struct {
 	Action string `json:"action"`
 	Ticket string `json:"ticket,omitempty"`
+	Accept bool   `json:"accept,omitempty"`
 }
 
 func (s *Server) Serve(l net.Listener) error {
@@ -59,6 +60,12 @@ func (s *Server) handle(c net.Conn) {
 	case "cancel":
 		if err := s.Manager.Cancel(); err != nil {
 			write(c, map[string]any{"accepted": false, "error": "No remote session is active."})
+			return
+		}
+		write(c, map[string]any{"accepted": true})
+	case "resolve_ssh_host_key":
+		if err := s.Manager.ResolveSSHHostKeyChange(q.Accept); err != nil {
+			write(c, map[string]any{"accepted": false, "error": "No SSH host-key change is awaiting confirmation."})
 			return
 		}
 		write(c, map[string]any{"accepted": true})

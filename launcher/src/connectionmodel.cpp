@@ -14,3 +14,4 @@ void ConnectionModel::clear(){beginResetModel();m_items.clear();endResetModel();
 qint64 ConnectionModel::idAt(int row) const{return row>=0&&row<m_items.size()?m_items.at(row).id:0;}
 QString ConnectionModel::nameAt(int row) const{return row>=0&&row<m_items.size()?m_items.at(row).name:QString();}
 QString ConnectionModel::protocolAt(int row) const{return row>=0&&row<m_items.size()?m_items.at(row).protocol:QString();}
+int ConnectionModel::indexOfId(qint64 id) const{for(int i=0;i<m_items.size();++i)if(m_items.at(i).id==id)return i;return -1;}

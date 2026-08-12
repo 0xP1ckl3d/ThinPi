@@ -3,7 +3,6 @@ package launch
 import (
 	"bufio"
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -39,14 +38,22 @@ type ClientInfo struct {
 	Version   string `json:"version,omitempty"`
 }
 type Status struct {
-	State               State      `json:"state"`
-	ActiveSession       *string    `json:"active_session"`
-	ControllerReachable bool       `json:"controller_reachable"`
-	FreeRDP             ClientInfo `json:"freerdp"`
-	Moonlight           ClientInfo `json:"moonlight"`
-	VNC                 ClientInfo `json:"vnc"`
-	SSH                 ClientInfo `json:"ssh"`
-	LastError           string     `json:"last_error,omitempty"`
+	State               State         `json:"state"`
+	ActiveSession       *string       `json:"active_session"`
+	ControllerReachable bool          `json:"controller_reachable"`
+	FreeRDP             ClientInfo    `json:"freerdp"`
+	Moonlight           ClientInfo    `json:"moonlight"`
+	VNC                 ClientInfo    `json:"vnc"`
+	SSH                 ClientInfo    `json:"ssh"`
+	LastError           string        `json:"last_error,omitempty"`
+	Confirmation        *Confirmation `json:"confirmation,omitempty"`
+}
+type Confirmation struct {
+	Kind        string `json:"kind"`
+	Message     string `json:"message"`
+	Host        string `json:"host"`
+	Port        int    `json:"port"`
+	Fingerprint string `json:"fingerprint,omitempty"`
 }
 type Controller interface {
 	Redeem(context.Context, string) (api.Manifest, error)
@@ -106,10 +113,12 @@ type Manager struct {
 	cancel       context.CancelFunc
 	log          *slog.Logger
 	clients      Clients
+	sshTrust     *SSHTrustStore
+	pendingSSH   *PendingSSHHostKey
 }
 
 func NewManager(c Controller, r Runner, mock bool, d time.Duration, clients Clients) *Manager {
-	return &Manager{controller: c, runner: r, mock: mock, mockDuration: d, clients: clients, status: Status{State: Idle, ControllerReachable: true, FreeRDP: clients.FreeRDP, Moonlight: clients.Moonlight, VNC: clients.VNC, SSH: clients.SSH}, log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	return &Manager{controller: c, runner: r, mock: mock, mockDuration: d, clients: clients, sshTrust: NewSSHTrustStore(defaultSSHKnownHostsPath()), status: Status{State: Idle, ControllerReachable: true, FreeRDP: clients.FreeRDP, Moonlight: clients.Moonlight, VNC: clients.VNC, SSH: clients.SSH}, log: slog.New(slog.NewTextHandler(io.Discard, nil))}
 }
 
 func (m *Manager) SetLogger(log *slog.Logger) {
@@ -127,6 +136,7 @@ func (m *Manager) set(state State, id *string, err error) {
 		m.status.LastError = err.Error()
 	} else if state == Idle {
 		m.status.LastError = ""
+		m.status.Confirmation = nil
 	}
 }
 func (m *Manager) Launch(ticket string) (string, error) {
@@ -139,6 +149,8 @@ func (m *Manager) Launch(ticket string) (string, error) {
 	m.status.State = Redeeming
 	m.status.ActiveSession = &id
 	m.status.LastError = ""
+	m.status.Confirmation = nil
+	m.pendingSSH = nil
 	m.mu.Unlock()
 	ctx, cancel := context.WithCancel(context.Background())
 	m.mu.Lock()
@@ -167,7 +179,27 @@ func (m *Manager) run(ctx context.Context, id, ticket string) {
 	if m.mock {
 		cmd = MockCommand(m.mockDuration)
 	} else {
-		cmd, err = m.commandFor(manifest)
+		if manifest.Protocol == "ssh" {
+			pending, trustErr := m.sshTrust.Prepare(ctx, manifest.Host, manifest.Port)
+			if trustErr != nil {
+				var changed *SSHHostKeyChangedError
+				if errors.As(trustErr, &changed) {
+					m.mu.Lock()
+					m.pendingSSH = pending
+					m.status.State = Failed
+					m.status.ActiveSession = nil
+					m.status.LastError = changed.Error()
+					m.status.Confirmation = &Confirmation{Kind: "ssh_host_key_changed", Message: changed.Error(), Host: changed.Host, Port: changed.Port, Fingerprint: changed.Fingerprint}
+					m.mu.Unlock()
+					_ = m.controller.SessionEvent(ctx, manifest.TicketID, manifest.ConnectionID, "session_failed", "ssh_host_key_changed", map[string]string{"fingerprint": changed.Fingerprint})
+					return
+				}
+				err = trustErr
+			}
+		}
+		if err == nil {
+			cmd, err = m.commandFor(manifest)
+		}
 	}
 	if err != nil {
 		m.set(Failed, nil, clientPreparationError(err))
@@ -213,6 +245,29 @@ func (m *Manager) run(ctx context.Context, id, ticket string) {
 	}
 	m.set(Stopping, &id, nil)
 	m.set(Idle, nil, nil)
+}
+
+func (m *Manager) ResolveSSHHostKeyChange(accept bool) error {
+	m.mu.Lock()
+	pending := m.pendingSSH
+	confirmation := m.status.Confirmation
+	m.mu.Unlock()
+	if pending == nil || confirmation == nil || confirmation.Kind != "ssh_host_key_changed" {
+		return errors.New("no SSH host-key change is awaiting confirmation")
+	}
+	if accept {
+		if err := m.sshTrust.Accept(pending); err != nil {
+			return err
+		}
+	}
+	m.mu.Lock()
+	m.pendingSSH = nil
+	m.status.State = Idle
+	m.status.ActiveSession = nil
+	m.status.LastError = ""
+	m.status.Confirmation = nil
+	m.mu.Unlock()
+	return nil
 }
 func clientPreparationError(err error) error {
 	switch err.Error() {
@@ -393,7 +448,6 @@ type VNCConfig struct {
 }
 
 type SSHConfig struct {
-	HostKey       string `json:"host_key"`
 	TerminalTitle string `json:"terminal_title,omitempty"`
 }
 
@@ -411,17 +465,6 @@ func SSHCommand(terminalBinary, sshBinary, sshpassBinary string, x api.Manifest)
 	if len(x.Config) == 0 || json.Unmarshal(x.Config, &cfg) != nil {
 		return Command{}, errors.New("invalid SSH settings")
 	}
-	hostKey := strings.TrimSpace(cfg.HostKey)
-	parts := strings.Fields(hostKey)
-	decodedKey, decodeErr := func() ([]byte, error) {
-		if len(parts) != 2 {
-			return nil, errors.New("invalid fields")
-		}
-		return base64.StdEncoding.DecodeString(parts[1])
-	}()
-	if len(parts) != 2 || !strings.HasPrefix(parts[0], "ssh-") || decodeErr != nil || len(decodedKey) < 32 || strings.ContainsAny(hostKey, "\r\n\x00") {
-		return Command{}, errors.New("a pinned SSH host key is required")
-	}
 	title := strings.TrimSpace(cfg.TerminalTitle)
 	if title == "" {
 		title = x.Name
@@ -432,17 +475,13 @@ func SSHCommand(terminalBinary, sshBinary, sshpassBinary string, x api.Manifest)
 	if len(title) > 128 || strings.ContainsAny(title, "\r\n\x00") {
 		return Command{}, errors.New("invalid SSH terminal title")
 	}
-	knownHost := x.Host
-	if x.Port != 22 {
-		knownHost = "[" + x.Host + "]:" + strconv.Itoa(x.Port)
-	}
-	files := []FileInput{{Placeholder: "{known_hosts_file}", Content: knownHost + " " + hostKey + "\n"}}
+	files := []FileInput{}
 	sshArgs := []string{"-F", "/dev/null", "-tt",
 		"-o", "EscapeChar=none", "-o", "PermitLocalCommand=no", "-o", "ClearAllForwardings=yes",
-		"-o", "DisableForwarding=yes", "-o", "ForwardAgent=no", "-o", "ForwardX11=no",
+		"-o", "ForwardAgent=no", "-o", "ForwardX11=no",
 		"-o", "ForwardX11Trusted=no", "-o", "ControlMaster=no", "-o", "ProxyCommand=none",
 		"-o", "ProxyJump=none", "-o", "IdentityAgent=none", "-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=yes",
-		"-o", "CheckHostIP=yes", "-o", "UserKnownHostsFile={known_hosts_file}",
+		"-o", "CheckHostIP=no", "-o", "UserKnownHostsFile=" + defaultSSHKnownHostsPath(),
 		"-o", "GlobalKnownHostsFile=/dev/null", "-p", strconv.Itoa(x.Port), "-l", x.Username, x.Host}
 	child := []string{sshBinary}
 	if x.CredentialType == "ssh_private_key" {

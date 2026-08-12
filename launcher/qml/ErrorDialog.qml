@@ -5,6 +5,7 @@ import QtQuick.Layouts
 Dialog {
     id: dialog
     property string message
+    property bool confirmSSHHostKey: false
     modal: true
     anchors.centerIn: Overlay.overlay
     width: Math.min(560, Overlay.overlay.width - 48)
@@ -31,11 +32,18 @@ Dialog {
             font.pixelSize: 16
             wrapMode: Text.Wrap
         }
-        ThinButton {
+        RowLayout {
             Layout.alignment: Qt.AlignRight
-            text: "Return to ThinPi"
-            variant: "primary"
-            onClicked: dialog.close()
+            ThinButton {
+                text: dialog.confirmSSHHostKey ? "Cancel" : "Return to ThinPi"
+                onClicked: { if (dialog.confirmSSHHostKey) backend.resolveSSHHostKey(false); dialog.close() }
+            }
+            ThinButton {
+                visible: dialog.confirmSSHHostKey
+                text: "Trust new key"
+                variant: "primary"
+                onClicked: { backend.resolveSSHHostKey(true); dialog.close() }
+            }
         }
     }
 }

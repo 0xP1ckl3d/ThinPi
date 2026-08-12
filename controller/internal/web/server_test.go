@@ -294,20 +294,16 @@ func TestProductionAdminPageContainsNoDevelopmentFixtures(t *testing.T) {
 			t.Fatalf("production page exposes development fixture %q", forbidden)
 		}
 	}
-	if !strings.Contains(string(body), "Linux command line (locked SSH)") || !strings.Contains(string(body), "SSH requires a pinned host public key") {
+	if !strings.Contains(string(body), "Linux command line (locked SSH)") || !strings.Contains(string(body), "trusted on first use") {
 		t.Fatal("production admin page does not expose the managed SSH workflow")
 	}
 	status, output := request(t, server.Client(), "POST", server.URL+"/api/v1/admin/connections", login["token"].(string), map[string]any{"name": "Injected demo", "description": "", "protocol": "mock", "host": "mock", "port": 1, "enabled": true, "icon": "", "sort_order": 0, "protocol_config": map[string]any{}})
 	if status != http.StatusBadRequest {
 		t.Fatalf("production accepted mock connection: %d %#v", status, output)
 	}
-	status, _ = request(t, server.Client(), "POST", server.URL+"/api/v1/admin/connections", login["token"].(string), map[string]any{"name": "Unpinned SSH", "description": "", "protocol": "ssh", "host": "ssh.example", "port": 22, "enabled": true, "icon": "", "sort_order": 0, "protocol_config": map[string]any{}})
-	if status != http.StatusBadRequest {
-		t.Fatalf("production accepted SSH without a pinned host key: %d", status)
-	}
-	status, output = request(t, server.Client(), "POST", server.URL+"/api/v1/admin/connections", login["token"].(string), map[string]any{"name": "Managed SSH", "description": "remote shell only", "protocol": "ssh", "host": "ssh.example", "port": 22, "enabled": true, "icon": "", "sort_order": 0, "protocol_config": map[string]any{"host_key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE4N4OjnVgCJ0eHqCY3YQBMJm1r+4BjJvYX0S2Ctmock"}})
+	status, output = request(t, server.Client(), "POST", server.URL+"/api/v1/admin/connections", login["token"].(string), map[string]any{"name": "Managed SSH", "description": "remote shell only", "protocol": "ssh", "host": "ssh.example", "port": 22, "enabled": true, "icon": "", "sort_order": 0, "protocol_config": map[string]any{"terminal_title": "Secure shell"}})
 	if status != http.StatusCreated {
-		t.Fatalf("production rejected managed SSH connection: %d %#v", status, output)
+		t.Fatalf("production rejected SSH without an administrator-supplied host key: %d %#v", status, output)
 	}
 }
 
@@ -448,10 +444,13 @@ func TestAdminJavaScriptDoesNotPassMapIndexToFetch(t *testing.T) {
 	if !bytes.Contains(body, []byte("window.location.replace('/admin/login')")) {
 		t.Fatal("expired admin API sessions do not redirect the browser to login")
 	}
-	for _, required := range []string{"ssh:{port:22", "ssh_host_key", "ssh_private_key", "assign-connection", "assign-user", "remove-assignment", "certificate_mode:'tofu'", "return-client"} {
+	for _, required := range []string{"ssh:{port:22", "ssh_private_key", "assign-connection", "assign-user", "remove-assignment", "certificate_mode:'tofu'", "return-client"} {
 		if !bytes.Contains(body, []byte(required)) {
 			t.Fatalf("admin workflow is missing %q", required)
 		}
+	}
+	if bytes.Contains(body, []byte("ssh_host_key")) {
+		t.Fatal("admin workflow still requests an SSH host public key")
 	}
 	if bytes.Contains(body, []byte("REPLACE_WITH_VERIFIED_SERVER_PUBLIC_KEY")) {
 		t.Fatal("admin SSH editor still ships an invalid placeholder host key")

@@ -310,7 +310,7 @@ It then:
 - installs a private CA into both agent and system trust stores;
 - writes `/etc/thinpi/device.json` mode `0600`;
 - installs hardened agent/UI systemd services;
-- installs the locked xterm/OpenSSH client and pinned-host-key enforcement;
+- installs the locked xterm/OpenSSH client with device-local first-use host-key trust;
 - masks ordinary local getties and blocks kiosk VT escape shortcuts;
 - installs the administrator-only, one-use-ticket maintenance console;
 - restricts Chromium to the controller's admin, API, and static paths and gives

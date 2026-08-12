@@ -6,9 +6,11 @@ Status: accepted and implemented.
 
 An SSH connection is a managed remote session, not a general terminal-emulator
 feature. The agent starts one full-screen xterm whose sole child is OpenSSH.
-The command is built from validated fields; a pinned host public key is
-mandatory; no shell interpolation or arbitrary SSH options exist. OpenSSH
-ignores user configuration and disables its escape command line, local
+The command is built from validated fields; no shell interpolation or arbitrary
+SSH options exist. Each device pins the host key automatically on first use in
+the agent's protected state directory. A changed key blocks launch until the
+dashboard shows its fingerprint and the user explicitly accepts or cancels.
+OpenSSH ignores user configuration and disables its escape command line, local
 commands, proxy commands, connection sharing, X11/agent/TCP forwarding and
 interactive host trust. Password material is passed through an owner-only
 ephemeral file and never argv. xterm has no tabs and exits with SSH.

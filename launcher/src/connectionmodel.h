@@ -16,6 +16,7 @@ public:
     qint64 idAt(int row) const;
     QString nameAt(int row) const;
     QString protocolAt(int row) const;
+    int indexOfId(qint64 id) const;
 private:
     struct Item { qint64 id; QString name, description, protocol, icon; };
     QList<Item> m_items;

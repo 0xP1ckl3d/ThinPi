@@ -61,8 +61,9 @@ Moonlight gets only `stream`, a validated host,
 and a validated configured application. The agent is deliberately the only
 place where upstream client syntax is encoded.
 
-SSH gets a single-purpose xterm with OpenSSH as its child. The remote host key
-is pinned in an ephemeral owner-only known-hosts file. OpenSSH ignores user
+SSH gets a single-purpose xterm with OpenSSH as its child. The agent records the
+remote host key in its protected persistent known-hosts file on first use and
+requires dashboard confirmation before replacing a changed key. OpenSSH ignores user
 configuration and disables its escape command line, local commands, agent/X11/
 TCP forwarding, proxy commands, connection sharing and host-key prompts. The
 password or private-key credential is held in an ephemeral owner-only file and

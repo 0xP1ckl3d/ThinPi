@@ -629,33 +629,21 @@ The unsafe ignore option exists only for deliberate troubleshooting.
 ThinPi SSH intentionally gives the user a shell on the **remote SSH server**.
 It never opens a shell on the Pi.
 
-On the remote SSH server, obtain its Ed25519 public host key through a trusted
-administrator session or console:
-
-```sh
-sudo cat /etc/ssh/ssh_host_ed25519_key.pub
-sudo ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
-```
-
-Verify the fingerprint out of band. Copy only the first two fields, for
-example:
-
-```text
-ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI...
-```
-
 In ThinPi:
 
 1. create a credential containing either the remote SSH username/password or
    the remote username/private key;
 2. create a **Linux command line (locked SSH)** connection;
 3. set host and port;
-4. paste the verified public key into **Verified SSH server host public key**;
-5. optionally set the terminal title;
-6. select **Assign access**, choose the intended person/group and credential,
+4. optionally set the terminal title;
+5. select **Assign access**, choose the intended person/group and credential,
    then save the rule.
 
-ThinPi refuses an SSH connection without a pinned host key. It also disables
+Each ThinPi records the server host key automatically on the first connection.
+If that key later changes, the connection stops and the dashboard displays the
+new fingerprint so the user can cancel or explicitly trust the replacement.
+Verify unexpected changes through a trusted console before accepting them.
+ThinPi also disables
 local commands, escape commands, agent/X11/TCP forwarding, user SSH config,
 host-key prompts, tabs, toolbars, terminal logging and window-control escape
 sequences. Closing or exiting SSH destroys the terminal and returns to ThinPi.

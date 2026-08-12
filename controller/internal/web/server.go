@@ -5,7 +5,6 @@ import (
 	"crypto/subtle"
 	"database/sql"
 	"embed"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -857,18 +856,12 @@ func validProtocolConfig(protocol string, raw json.RawMessage) bool {
 		return true
 	}
 	var cfg struct {
-		HostKey       string `json:"host_key"`
 		TerminalTitle string `json:"terminal_title,omitempty"`
 	}
 	if json.Unmarshal(raw, &cfg) != nil || len(cfg.TerminalTitle) > 128 || strings.ContainsAny(cfg.TerminalTitle, "\r\n\x00") {
 		return false
 	}
-	parts := strings.Fields(strings.TrimSpace(cfg.HostKey))
-	if len(parts) != 2 || !strings.HasPrefix(parts[0], "ssh-") || strings.ContainsAny(cfg.HostKey, "\r\n\x00") {
-		return false
-	}
-	decoded, err := base64.StdEncoding.DecodeString(parts[1])
-	return err == nil && len(decoded) >= 32
+	return true
 }
 func validLabel(v string, max int) bool {
 	v = strings.TrimSpace(v)
