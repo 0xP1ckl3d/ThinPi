@@ -32,7 +32,10 @@ if systemctl list-unit-files thinpi-agent.service --no-legend 2>/dev/null | grep
     sudo apt-get update
     sudo apt-get install -y libnss3-tools
   }
-  CONTROLLER_URL=$(sed -n 's/^THINPI_API_URL=//p' /etc/thinpi/ui.env | sed -n '1p')
+  # /etc/thinpi is intentionally inaccessible to the SSH deployment user.
+  # Read the controller URL through sudo; do not hide a failed read behind a
+  # pipeline whose final command exits successfully.
+  CONTROLLER_URL=$(sudo sed -n 's/^THINPI_API_URL=//p' /etc/thinpi/ui.env)
   [ -z "$CONTROLLER_URL" ] || sudo /usr/local/libexec/thinpi-browser-policy "$CONTROLLER_URL"
   sudo pkill -u thinpi -x chrome 2>/dev/null || true
   sudo pkill -u thinpi -x chromium 2>/dev/null || true
