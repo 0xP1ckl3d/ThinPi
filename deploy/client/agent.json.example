@@ -1,0 +1,13 @@
+{
+  "controller_url": "https://10.20.0.10:8443",
+  "device_file": "/etc/thinpi/device.json",
+  "socket": "/run/thinpi/agent.sock",
+  "ca_certificate": "/etc/thinpi/controller-ca.pem",
+  "freerdp_binary": "auto",
+  "moonlight_binary": "auto",
+  "vnc_binary": "auto",
+  "ssh_binary": "auto",
+  "terminal_binary": "auto",
+  "sshpass_binary": "auto",
+  "maintenance_user": "thinpiadmin"
+}

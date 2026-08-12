@@ -1,0 +1,34 @@
+[Unit]
+Description=ThinPi kiosk user interface
+After=thinpi-agent.service systemd-user-sessions.service
+Requires=thinpi-agent.service
+Conflicts=getty@tty7.service
+
+[Service]
+User=thinpi
+Group=thinpi
+PAMName=login
+TTYPath=/dev/tty7
+StandardInput=tty
+StandardOutput=journal
+StandardError=journal
+ExecStart=/usr/bin/xinit /etc/thinpi/xinitrc -- :0 -nolisten tcp vt7 -keeptty
+Restart=always
+RestartSec=2
+Environment=THINPI_AGENT_SOCKET=/run/thinpi/agent.sock
+EnvironmentFile=-/etc/thinpi/ui.env
+Environment=QT_LOGGING_RULES=*.debug=false
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/thinpi
+RestrictSUIDSGID=true
+LockPersonality=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+
+[Install]
+WantedBy=thinpi.target

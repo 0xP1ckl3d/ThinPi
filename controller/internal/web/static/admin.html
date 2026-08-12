@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="csrf" content="{{.CSRF}}">
+  <title>ThinPi Console</title>
+  <link rel="stylesheet" href="/static/admin-v2.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><span class="brand-mark">T</span><div><strong>ThinPi</strong><small>Home console</small></div></div>
+    <div class="top-actions">{{if .Dev}}<span class="environment"><i></i> Development</span>{{end}}<form action="/admin/logout" method="post"><input type="hidden" name="csrf" value="{{.CSRF}}"><button class="quiet">{{.Name}} · Log out</button></form></div>
+  </header>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Administration">
+      <p class="nav-label">Manage</p>
+      <nav>
+        <button class="nav-item active" data-tab="overview"><span>⌂</span>Overview</button>
+        <button class="nav-item" data-tab="people"><span>◎</span>People</button>
+        <button class="nav-item" data-tab="connections"><span>▣</span>Connections</button>
+        <button class="nav-item" data-tab="access"><span>◆</span>Access rules</button>
+        <button class="nav-item" data-tab="devices"><span>▰</span>Devices</button>
+        <button class="nav-item" data-tab="credentials"><span>●</span>Credentials</button>
+        <button class="nav-item" data-tab="activity"><span>≡</span>Activity</button>
+      </nav>
+      {{if .Dev}}<div class="sidebar-note"><strong>Local test mode</strong><span>Sessions use safe demo clients. No external host is contacted.</span></div>{{end}}
+    </aside>
+    <main class="workspace">
+      <div id="status" class="toast" role="status" aria-live="polite"></div>
+
+      <section id="overview" class="view active">
+        <div class="page-heading"><div><p class="eyebrow">Household at a glance</p><h1>Overview</h1><p>Users, appliances, access and recent launches.</p></div><button class="primary" data-jump="connections">Add connection</button></div>
+        <div id="metrics" class="metric-grid"></div>
+        <div class="content-grid two">
+          {{if .Dev}}<article class="panel"><div class="panel-heading"><div><h2>Test the experience</h2><p>The development client can launch visible demo sessions.</p></div><span class="badge green">Ready</span></div><ol class="steps"><li><b>1</b><span>Open the ThinPi launcher</span></li><li><b>2</b><span>Sign in as daughter / thinpi-dev</span></li><li><b>3</b><span>Launch any assigned desktop</span></li></ol></article>{{end}}
+          <article class="panel"><div class="panel-heading"><div><h2>Policy snapshot</h2><p>Restrictions are enforced by the controller and agent.</p></div></div><div id="policy-snapshot" class="policy-snapshot"></div></article>
+        </div>
+      </section>
+
+      <section id="people" class="view">
+        <div class="page-heading"><div><p class="eyebrow">Household access</p><h1>People</h1><p>Accounts, status, roles and parental controls.</p></div></div>
+        <article class="panel"><div class="panel-heading"><div><h2>Add person</h2><p>Create a sign-in for the launcher.</p></div></div><form id="user-form" class="form-grid"><label>Username<input name="username" required></label><label>Display name<input name="display_name" required></label><label>Initial password<input name="password" type="password" minlength="8" required></label><label class="check"><input name="is_admin" type="checkbox"> Administrator</label><label class="check"><input name="enabled" type="checkbox" checked> Active account</label><button class="primary">Create person</button></form></article>
+        <article class="panel"><div class="panel-heading"><div><h2>People</h2><p>Disable an account instantly or edit its restrictions.</p></div></div><div class="table-wrap"><table><thead><tr><th>Person</th><th>Role</th><th>Access policy</th><th>Status</th><th class="actions-col">Actions</th></tr></thead><tbody id="users-body"></tbody></table></div></article>
+        <article class="panel"><div class="panel-heading"><div><h2>Groups</h2><p>Share connections and credentials across family members.</p></div></div><form id="group-form" class="inline-form"><label>Group name<input name="name" required></label><label>Description<input name="description"></label><button class="secondary">Add group</button></form><div id="groups-list" class="card-list"></div></article>
+      </section>
+
+      <section id="connections" class="view">
+        <div class="page-heading"><div><p class="eyebrow">Remote systems</p><h1>Connections</h1><p>RDP, Linux VNC, locked SSH and Moonlight sessions.</p></div></div>
+        <article class="panel"><div class="panel-heading"><div><h2>Add connection</h2><p>Credentials are delivered only to the device agent. SSH requires a pinned host public key.</p></div></div><form id="connection-form" class="form-grid connection-form"><label>Name<input name="name" required></label><label>Type<select name="protocol" id="connection-protocol"><option value="rdp">Windows / Linux RDP</option><option value="vnc">Linux desktop (VNC)</option><option value="ssh">Linux command line (locked SSH)</option><option value="moonlight">Moonlight / Sunshine</option>{{if .Dev}}<option value="mock">Demo session</option>{{end}}</select></label><label>Host or IP<input name="host" required></label><label>Port<input name="port" type="number" min="1" max="65535" value="3389" required></label><label>Description<input name="description"></label><label>Default credential<select name="credential_id" id="connection-credential"><option value="">No stored credential</option></select></label><label class="check"><input name="enabled" type="checkbox" checked> Available</label><label>Order<input name="sort_order" type="number" value="0"></label><label class="wide">Advanced protocol settings<textarea name="protocol_config">{"fullscreen":true,"dynamic_resolution":true,"audio":true,"clipboard":false}</textarea></label><input name="icon" type="hidden" value=""><button class="primary">Create connection</button></form></article>
+        <div id="connections-list" class="connection-grid"></div>
+      </section>
+
+      <section id="access" class="view">
+        <div class="page-heading"><div><p class="eyebrow">Who can use what</p><h1>Access rules</h1><p>Assign a system and its credential to a person or group.</p></div></div>
+        <article class="panel"><form id="permission-form" class="form-grid"><label>Assign to<select name="subject_type" id="perm-subject-type"><option value="user">Person</option><option value="group">Group</option></select></label><label>Person or group<select name="subject_id" id="perm-subject"></select></label><label>Connection<select name="connection_id" id="perm-connection"></select></label><label>Credential override<select name="credential_id" id="perm-credential"><option value="">Use connection default</option></select></label><label class="check"><input name="can_launch" type="checkbox" checked> Allow launch</label><button class="primary">Save rule</button></form></article>
+        <article class="panel"><div class="panel-heading"><div><h2>Current assignments</h2><p>The launcher never receives these passwords.</p></div></div><div class="table-wrap"><table><thead><tr><th>Person / group</th><th>Connection</th><th>Credential used</th><th>Status</th></tr></thead><tbody id="permissions-body"></tbody></table></div></article>
+        <article class="panel"><div class="panel-heading"><div><h2>Group membership</h2></div></div><form id="membership-form" class="inline-form"><label>Person<select name="user_id" id="member-user"></select></label><label>Group<select name="group_id" id="member-group"></select></label><label class="check"><input name="member" type="checkbox" checked> Member</label><button class="secondary">Update membership</button></form></article>
+      </section>
+
+      <section id="devices" class="view">
+        <div class="page-heading"><div><p class="eyebrow">Thin client appliances</p><h1>Devices</h1><p>Enrol, monitor or revoke a Raspberry Pi.</p></div></div>
+        <article class="panel"><form id="token-form" class="inline-form"><label>Device name<input name="name" required></label><label>Token lifetime<select name="ttl_minutes"><option value="15">15 minutes</option><option value="60">1 hour</option><option value="1440">24 hours</option></select></label><button class="primary">Create enrolment token</button></form><code id="new-token" class="token-output"></code></article>
+        <div id="devices-list" class="card-list"></div>
+      </section>
+
+      <section id="credentials" class="view">
+        <div class="page-heading"><div><p class="eyebrow">Protected secrets</p><h1>Credentials</h1><p>Store once, then attach by name to a connection or access rule.</p></div></div>
+        <div class="security-callout"><span>✓</span><div><strong>Passwords stay off the launcher</strong><p>Secrets are encrypted at rest and released only to an authenticated device after an authorised launch.</p></div></div>
+        <article class="panel"><form id="credential-form" class="form-grid"><label>Label<input name="name" placeholder="Daughter school account" required></label><label>Remote username<input name="username"></label><label>Password<input name="secret" type="password"></label><label>Type<select name="secret_type"><option value="password">Username and password</option><option value="username_only">Username only</option></select></label><button class="primary">Store credential</button></form></article>
+        <div id="credentials-list" class="card-list"></div>
+      </section>
+
+      <section id="activity" class="view">
+        <div class="page-heading"><div><p class="eyebrow">Security trail</p><h1>Activity</h1><p>Logins, policy denials, launches and device events.</p></div></div>
+        <article class="panel"><label class="search">Search activity<input id="audit-filter" placeholder="Event, result, user, device or connection"></label><div class="table-wrap"><table><thead><tr><th>Time</th><th>Event</th><th>User</th><th>Device</th><th>Connection</th><th>Result</th></tr></thead><tbody id="audit-body"></tbody></table></div></article>
+      </section>
+    </main>
+  </div>
+
+  <dialog id="editor-dialog"><form id="editor-form"><div class="dialog-title"><div><p class="eyebrow">Edit settings</p><h2 id="editor-title"></h2></div><button type="button" class="icon-button" id="editor-close" aria-label="Close">×</button></div><p id="editor-message" class="muted"></p><div id="editor-fields" class="dialog-fields"></div><div class="dialog-actions"><button type="button" id="editor-cancel" class="quiet">Cancel</button><button type="submit" id="editor-submit" class="primary">Save changes</button></div></form></dialog>
+  <dialog id="policy-dialog"><form id="policy-form"><div class="dialog-title"><div><p class="eyebrow">Parental controls</p><h2 id="policy-title">Access policy</h2></div><button type="button" class="icon-button" data-policy-close aria-label="Close">×</button></div><div class="policy-form"><fieldset><legend>Allowed days</legend><div class="day-picker" id="policy-days"></div></fieldset><div class="form-grid"><label>Available from<input id="policy-start" type="time" required></label><label>Available until<input id="policy-end" type="time" required></label><label>Daily allowance (minutes)<input id="policy-daily" type="number" min="0" max="1440"><small>0 means unlimited</small></label><label>Maximum session (minutes)<input id="policy-session" type="number" min="0" max="720"><small>0 means unlimited</small></label><label class="wide">Timezone<input id="policy-timezone" value="Australia/Sydney" required></label></div></div><div class="dialog-actions"><button type="button" class="quiet" data-policy-close>Cancel</button><button class="primary">Save policy</button></div></form></dialog>
+  <script src="/static/admin-v2.js"></script>
+</body>
+</html>

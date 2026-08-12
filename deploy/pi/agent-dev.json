@@ -1,0 +1,7 @@
+{
+  "controller_url": "http://127.0.0.1:8080",
+  "device_file": "../deploy/pi/nonexistent-dev-device.json",
+  "socket": "/tmp/thinpi-agent-dev.sock",
+  "mock_clients": true,
+  "mock_duration_seconds": 3
+}

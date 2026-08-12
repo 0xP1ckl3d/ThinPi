@@ -1,0 +1,14 @@
+[Unit]
+Description=ThinPi authorised local maintenance console for %i
+After=systemd-user-sessions.service
+Conflicts=getty@tty2.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/openvt -c 2 -f -s -w -- /usr/local/libexec/thinpi-maintenance-session %i
+StandardOutput=journal
+StandardError=journal
+TimeoutStartSec=infinity
+
+[Install]
+WantedBy=thinpi.target

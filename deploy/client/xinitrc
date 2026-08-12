@@ -1,0 +1,9 @@
+#!/bin/sh
+# shellcheck disable=SC3045
+ulimit -c 0
+xhost - >/dev/null 2>&1 || true
+xset -dpms
+xset s off
+xset s noblank
+matchbox-window-manager -use_titlebar no -use_cursor no &
+exec /usr/bin/thinpi-launcher

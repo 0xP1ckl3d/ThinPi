@@ -1,0 +1,34 @@
+[Unit]
+Description=ThinPi native client agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/thinpi-agent serve --config /etc/thinpi/agent.json
+ExecStartPost=/bin/chgrp thinpi /run/thinpi/agent.sock
+Restart=always
+RestartSec=2
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/thinpi/.Xauthority
+Environment=HOME=/var/lib/thinpi-agent
+Environment=THINPI_SESSION_HOME=/home/thinpi
+RuntimeDirectory=thinpi
+RuntimeDirectoryMode=0750
+StateDirectory=thinpi-agent
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/run/thinpi /var/lib/thinpi-agent
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

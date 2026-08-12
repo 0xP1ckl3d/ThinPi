@@ -1,0 +1,45 @@
+services:
+  initialise-data:
+    image: busybox:1.37
+    command: ["sh", "-c", "chown 65532:65532 /var/lib/thinpi && chmod 0700 /var/lib/thinpi"]
+    volumes:
+      - thinpi-data:/var/lib/thinpi
+    restart: "no"
+  controller:
+    build:
+      context: ../../controller
+      args:
+        VERSION: ${THINPI_VERSION:-dev}
+    restart: unless-stopped
+    depends_on:
+      initialise-data:
+        condition: service_completed_successfully
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,noexec,nosuid,nodev
+    ports:
+      - "${THINPI_BIND_ADDRESS:-0.0.0.0}:8443:8443"
+    environment:
+      THINPI_DATABASE: /var/lib/thinpi/thinpi.db
+      THINPI_LISTEN: 0.0.0.0:8443
+      THINPI_MASTER_KEY_FILE: /run/secrets/thinpi_master_key
+      THINPI_TLS_CERT: /run/tls/tls.crt
+      THINPI_TLS_KEY: /run/tls/tls.key
+    volumes:
+      - thinpi-data:/var/lib/thinpi
+      - ./tls:/run/tls:ro
+    secrets:
+      - thinpi_master_key
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    healthcheck:
+      test: ["CMD", "/usr/bin/thinpi-controller", "healthcheck", "--url", "https://127.0.0.1:8443/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+volumes:
+  thinpi-data:
+secrets:
+  thinpi_master_key:
+    file: ${THINPI_MASTER_KEY_FILE:-./secrets/thinpi_master_key}

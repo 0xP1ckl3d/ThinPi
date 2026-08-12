@@ -1,0 +1,58 @@
+name: ci
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  go:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache-dependency-path: |
+            controller/go.sum
+            agent/go.sum
+      - run: sh scripts/repo-audit.sh
+      - run: make fmt
+      - run: git diff --exit-code
+      - run: make vet
+      - run: make test
+  launcher:
+    runs-on: ubuntu-24.04
+    container: debian:trixie
+    steps:
+      - run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y git ca-certificates cmake ninja-build g++ pkg-config qt6-base-dev qt6-declarative-dev dpkg-dev
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache-dependency-path: agent/go.sum
+      - run: cmake -S launcher -B build/launcher -G Ninja -DBUILD_TESTING=ON
+      - run: cmake --build build/launcher
+      - run: ctest --test-dir build/launcher --output-on-failure
+      - name: Build and package amd64 client
+        run: |
+          sh scripts/build-client.sh amd64
+          sh scripts/package-debs.sh 0.0.0-ci amd64
+          test "$(dpkg-deb -f bin/packages/thinpi-agent_0.0.0-ci_amd64.deb Architecture)" = amd64
+          test "$(dpkg-deb -f bin/packages/thinpi-launcher_0.0.0-ci_amd64.deb Architecture)" = amd64
+  lubuntu-client:
+    runs-on: ubuntu-24.04
+    container: ubuntu:26.04
+    steps:
+      - run: apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y git ca-certificates build-essential cmake ninja-build pkg-config qt6-base-dev qt6-declarative-dev golang-go dpkg-dev
+      - uses: actions/checkout@v4
+      - run: sh tests/deployment/client-scripts.sh
+      - run: cmake -S launcher -B build/lubuntu-launcher -G Ninja -DBUILD_TESTING=ON
+      - run: cmake --build build/lubuntu-launcher
+      - run: ctest --test-dir build/lubuntu-launcher --output-on-failure
+      - run: cd agent && go test ./...
+      - name: Build and package Lubuntu amd64 client
+        run: |
+          sh scripts/build-client.sh amd64
+          sh scripts/package-debs.sh 0.0.0-ci amd64
+          test "$(dpkg-deb -f bin/packages/thinpi-agent_0.0.0-ci_amd64.deb Architecture)" = amd64
+          test "$(dpkg-deb -f bin/packages/thinpi-launcher_0.0.0-ci_amd64.deb Architecture)" = amd64
