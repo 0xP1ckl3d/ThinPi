@@ -3,6 +3,13 @@ set -eu
 
 PLATFORM=${1:-auto}
 case "$PLATFORM" in auto|generic|raspberry-pi) ;; *) echo "Invalid platform" >&2; exit 2;; esac
+if [ "$PLATFORM" = auto ]; then
+  if [ -r /proc/device-tree/model ] && grep -q "Raspberry Pi" /proc/device-tree/model; then
+    PLATFORM=raspberry-pi
+  else
+    PLATFORM=generic
+  fi
+fi
 export PATH=/usr/local/go/bin:"$PATH"
 
 cd /tmp/thinpi/agent
@@ -13,6 +20,10 @@ sudo install -m 0755 /tmp/thinpi-agent /usr/local/bin/thinpi-agent
 sudo install -m 0755 /tmp/thinpi/launcher-build/thinpi-launcher /usr/local/bin/thinpi-launcher
 
 if systemctl list-unit-files thinpi-agent.service --no-legend 2>/dev/null | grep -q thinpi-agent; then
+  [ -x /usr/lib/xorg/Xorg.wrap ] || {
+    echo "The installed client is missing /usr/lib/xorg/Xorg.wrap; rerun provisioning to install xserver-xorg-legacy" >&2
+    exit 1
+  }
   sudo install -m 0755 /tmp/thinpi-agent /usr/bin/thinpi-agent
   sudo install -m 0755 /tmp/thinpi/launcher-build/thinpi-launcher /usr/bin/thinpi-launcher
   sudo install -m 0644 /tmp/thinpi/deploy-client/thinpi-agent.service /etc/systemd/system/thinpi-agent.service
@@ -26,7 +37,15 @@ if systemctl list-unit-files thinpi-agent.service --no-legend 2>/dev/null | grep
   sudo install -m 0644 /tmp/thinpi/deploy-client/hardening/Xwrapper.config /etc/X11/Xwrapper.config
   sudo install -m 0644 /tmp/thinpi/deploy-client/hardening/10-thinpi-kiosk.conf /etc/X11/xorg.conf.d/10-thinpi-kiosk.conf
   sudo install -m 0644 /tmp/thinpi/deploy-client/hardening/99-thinpi-ssh.conf /etc/ssh/sshd_config.d/99-thinpi.conf
+  if [ "$PLATFORM" = raspberry-pi ]; then
+    sudo sed -i 's/^needs_root_rights=auto$/needs_root_rights=yes/' /etc/X11/Xwrapper.config
+    sudo install -m 0755 /tmp/thinpi/deploy-client/configure-pi-xorg.sh /usr/local/libexec/thinpi-configure-pi-xorg
+    sudo install -d -o root -g root -m 0755 /etc/systemd/system/thinpi-ui.service.d
+    sudo install -m 0644 /tmp/thinpi/deploy-client/thinpi-ui-pi.conf /etc/systemd/system/thinpi-ui.service.d/raspberry-pi.conf
+    sudo /usr/local/libexec/thinpi-configure-pi-xorg
+  fi
   sudo systemctl daemon-reload
+  sudo systemctl set-default thinpi.target
   sudo sshd -t
   command -v certutil >/dev/null 2>&1 || {
     sudo apt-get update

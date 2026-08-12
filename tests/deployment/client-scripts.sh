@@ -15,6 +15,7 @@ $ROOT/deploy/client/stage.sh
 $ROOT/deploy/client/update.sh
 $ROOT/deploy/client/maintenance-session.sh
 $ROOT/deploy/client/xinitrc
+$ROOT/deploy/client/configure-pi-xorg.sh
 $ROOT/deploy/pi/provision.sh
 $ROOT/deploy/pi/update.sh
 "
@@ -38,7 +39,7 @@ grep -F 'xhost +SI:localuser:thinpi' "$ROOT/deploy/client/xinitrc" >/dev/null
 grep -F 'TTYPath=/dev/tty2' "$ROOT/deploy/client/thinpi-maintenance@.service" >/dev/null
 grep -F 'pipewire-audio pipewire-alsa pipewire-pulse' "$ROOT/deploy/client/provision.sh" >/dev/null
 grep -F 'bash /tmp/moonlight-repo.sh' "$ROOT/deploy/client/provision.sh" >/dev/null
-grep -F "THINPI_OS_VERSION\" = 26.04" "$ROOT/deploy/client/provision.sh" >/dev/null
+grep -F 'install_moonlight_appimage_amd64' "$ROOT/deploy/client/provision.sh" >/dev/null
 grep -F 'ControlMaster=yes' "$ROOT/scripts/deploy-client.sh" >/dev/null
 grep -F 'ControlPath=' "$ROOT/scripts/deploy-client.sh" >/dev/null
 grep -F -- '--disable-ssh-passwords' "$ROOT/deploy/client/provision.sh" >/dev/null
@@ -47,6 +48,32 @@ if grep -F 'PasswordAuthentication no' "$ROOT/deploy/client/hardening/99-thinpi-
   exit 1
 fi
 grep -F 'Requires=multi-user.target' "$ROOT/deploy/client/thinpi.target" >/dev/null
+! grep -F 'Alias=default.target' "$ROOT/deploy/client/thinpi.target" >/dev/null
+grep -F 'systemctl set-default thinpi.target' "$ROOT/deploy/client/provision.sh" >/dev/null
+grep -F 'sudo systemctl set-default thinpi.target' "$ROOT/deploy/client/stage.sh" >/dev/null
+if grep -E 'systemctl enable .*thinpi\.target' "$ROOT/deploy/client/provision.sh" >/dev/null; then
+  echo "thinpi.target must be selected with systemctl set-default, not enabled" >&2
+  exit 1
+fi
+grep -F 'qt6-svg-plugins' "$ROOT/deploy/client/provision.sh" >/dev/null
+grep -F 'needs_root_rights=auto' "$ROOT/deploy/client/hardening/Xwrapper.config" >/dev/null
+grep -F "s/^needs_root_rights=auto\$/needs_root_rights=yes/" "$ROOT/deploy/client/provision.sh" >/dev/null
+grep -F "s/^needs_root_rights=auto\$/needs_root_rights=yes/" "$ROOT/deploy/client/stage.sh" >/dev/null
+grep -F '/usr/lib/xorg/Xorg.wrap :0' "$ROOT/deploy/client/thinpi-ui.service" >/dev/null
+grep -F '[ -x /usr/lib/xorg/Xorg.wrap ]' "$ROOT/deploy/client/provision.sh" >/dev/null
+grep -F '[ -x /usr/lib/xorg/Xorg.wrap ]' "$ROOT/deploy/client/stage.sh" >/dev/null
+grep -F 'by-path/*-card' "$ROOT/deploy/client/configure-pi-xorg.sh" >/dev/null
+if grep -E '/dev/dri/card[01]([^0-9]|$)' "$ROOT/deploy/client/configure-pi-xorg.sh" >/dev/null; then
+  echo "The Pi Xorg helper must not persist a probe-order-dependent DRM card" >&2
+  exit 1
+fi
+grep -F 'thinpi-configure-pi-xorg' "$ROOT/deploy/client/provision.sh" >/dev/null
+grep -F 'sudo /usr/local/libexec/thinpi-configure-pi-xorg' "$ROOT/deploy/client/stage.sh" >/dev/null
+grep -F 'NoNewPrivileges=true' "$ROOT/deploy/client/thinpi-ui.service" >/dev/null
+grep -F 'NoNewPrivileges=false' "$ROOT/deploy/client/thinpi-ui-pi.conf" >/dev/null
+grep -F 'thinpi-ui-pi.conf' "$ROOT/deploy/client/provision.sh" >/dev/null
+grep -F 'thinpi-ui-pi.conf' "$ROOT/deploy/client/stage.sh" >/dev/null
+grep -F './scripts/deploy-pi.sh pickle@localhost' "$ROOT/docs/pi-deployment.md" >/dev/null
 grep -F -- '--platform raspberry-pi' "$ROOT/scripts/deploy-pi.sh" >/dev/null
 grep -F 'deploy/client/provision.sh' "$ROOT/deploy/pi/provision.sh" >/dev/null
 grep -F 'Architecture: %s' "$ROOT/scripts/package-debs.sh" >/dev/null
@@ -70,6 +97,32 @@ check_os lubuntu-2604 ubuntu:26.04
 if THINPI_OS_RELEASE_FILE="$FIXTURE_DIR/unsupported" sh -c '. "$1"; thinpi_load_supported_os' sh "$ROOT/deploy/client/lib/platform.sh" >/dev/null 2>&1; then
   echo "Ubuntu 22.04 should be rejected" >&2
   exit 1
+fi
+
+mkdir -p "$FIXTURE_DIR/sys/class/drm/card0-HDMI-A-1" \
+  "$FIXTURE_DIR/sys/class/drm/card1-HDMI-A-1" "$FIXTURE_DIR/dev/dri/by-path" \
+  "$FIXTURE_DIR/etc/X11/xorg.conf.d"
+printf '%s\n' disconnected > "$FIXTURE_DIR/sys/class/drm/card0-HDMI-A-1/status"
+printf '%s\n' connected > "$FIXTURE_DIR/sys/class/drm/card1-HDMI-A-1/status"
+: > "$FIXTURE_DIR/dev/dri/card0"
+: > "$FIXTURE_DIR/dev/dri/card1"
+ln -s ../card0 "$FIXTURE_DIR/dev/dri/by-path/platform-vc4-secondary-card"
+ln -s ../card1 "$FIXTURE_DIR/dev/dri/by-path/platform-vc4-display-card"
+if [ -L "$FIXTURE_DIR/dev/dri/by-path/platform-vc4-display-card" ]; then
+  THINPI_DRM_SYSFS_ROOT="$FIXTURE_DIR/sys/class/drm" \
+  THINPI_DRI_ROOT="$FIXTURE_DIR/dev/dri" \
+  THINPI_XORG_CONFIG="$FIXTURE_DIR/etc/X11/xorg.conf.d/99-thinpi-vc4.conf" \
+    sh "$ROOT/deploy/client/configure-pi-xorg.sh"
+  grep -F "Option \"kmsdev\" \"$FIXTURE_DIR/dev/dri/by-path/platform-vc4-display-card\"" \
+    "$FIXTURE_DIR/etc/X11/xorg.conf.d/99-thinpi-vc4.conf" >/dev/null
+
+  printf '%s\n' disconnected > "$FIXTURE_DIR/sys/class/drm/card1-HDMI-A-1/status"
+  THINPI_DRM_SYSFS_ROOT="$FIXTURE_DIR/sys/class/drm" \
+  THINPI_DRI_ROOT="$FIXTURE_DIR/dev/dri" \
+  THINPI_XORG_CONFIG="$FIXTURE_DIR/etc/X11/xorg.conf.d/99-thinpi-vc4.conf" \
+    sh "$ROOT/deploy/client/configure-pi-xorg.sh"
+  grep -F "Option \"kmsdev\" \"$FIXTURE_DIR/dev/dri/by-path/platform-vc4-secondary-card\"" \
+    "$FIXTURE_DIR/etc/X11/xorg.conf.d/99-thinpi-vc4.conf" >/dev/null
 fi
 
 echo "Client deployment script checks passed."

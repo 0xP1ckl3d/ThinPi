@@ -182,13 +182,43 @@ go version
 
 Do not continue until all version checks pass.
 
-## 6. Build and stage ThinPi from the workstation
+## 6. Build and stage ThinPi
 
-From the repository root on Linux, macOS, or WSL:
+Cloning the repository onto the Pi does **not** stage the ARM64 agent and
+launcher binaries. In both supported deployment models, run `deploy-pi.sh`
+before running the provisioner.
+
+### Normal workstation-to-Pi staging
+
+When the workstation/controller can initiate SSH connections to the Pi, run
+this from the repository root on Linux, macOS, or WSL:
 
 ```sh
 sh scripts/deploy-pi.sh piadmin@thinpi-living-room
 ```
+
+For example, with mDNS and an administrator named `pickle`:
+
+```sh
+sh scripts/deploy-pi.sh pickle@thinpi-pi.local
+```
+
+### Reverse/local staging
+
+When the Pi can reach the Git repository or controller but inbound SSH to the
+Pi is unavailable, clone the repository on the Pi and deploy to its local SSH
+server:
+
+```sh
+git clone https://github.com/0xP1ckl3d/ThinPi.git /tmp/ThinPi
+cd /tmp/ThinPi
+./scripts/deploy-pi.sh pickle@localhost
+```
+
+Replace `pickle` with the Pi administrator. The local deployment still runs
+the same preflight, copies the client sources to `/tmp/thinpi`, builds the
+native ARM64 binaries, and stages them. A repository clone without this command
+is not a staged deployment.
 
 The script:
 
@@ -234,7 +264,7 @@ or a permanent config file. The provisioner prompts for it without echo.
 ## 8. Run the provisioner
 
 If using a private CA, ensure `/tmp/thinpi-ca.crt` exists on the Pi. Then SSH to
-the Pi and run:
+the Pi and run the provisioner from the staged `/tmp/thinpi` tree:
 
 ```sh
 sudo sh /tmp/thinpi/deploy-client/provision.sh \
@@ -242,6 +272,17 @@ sudo sh /tmp/thinpi/deploy-client/provision.sh \
   --server https://thinpi.home.example:8443 \
   --device-id pi-living-room \
   --name 'Living room' \
+  --ca-certificate /tmp/thinpi-ca.crt
+```
+
+For the reverse/local example above, the equivalent command is:
+
+```sh
+sudo sh /tmp/thinpi/deploy-client/provision.sh \
+  --platform raspberry-pi \
+  --server https://10.10.10.60:8443 \
+  --device-id thinpi-pi-01 \
+  --name "Dining Room Pi" \
   --ca-certificate /tmp/thinpi-ca.crt
 ```
 

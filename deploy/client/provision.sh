@@ -116,6 +116,10 @@ apt-get install -y --no-install-recommends \
 if [ "$PLATFORM" = generic ]; then
   apt-get install -y --no-install-recommends xserver-xorg-video-all libgl1-mesa-dri
 fi
+if [ "$PLATFORM" = raspberry-pi ]; then
+  apt-get install -y --no-install-recommends qt6-svg-plugins
+fi
+[ -x /usr/lib/xorg/Xorg.wrap ] || { echo "xserver-xorg-legacy did not install /usr/lib/xorg/Xorg.wrap" >&2; exit 1; }
 QT_VERSION=$(dpkg-query -W -f='${Version}' "$QT_CORE_PACKAGE")
 dpkg --compare-versions "$QT_VERSION" ge 6.4 || { echo "ThinPi requires Qt 6.4 or newer; installed $QT_CORE_PACKAGE is $QT_VERSION" >&2; exit 1; }
 if apt-cache show freerdp3-x11 >/dev/null 2>&1; then apt-get install -y freerdp3-x11; else apt-get install -y freerdp2-x11; fi
@@ -244,6 +248,13 @@ install -m 0755 "$SCRIPT_DIR/browser-policy.sh" /usr/local/libexec/thinpi-browse
 install -m 0644 "$SCRIPT_DIR/hardening/Xwrapper.config" /etc/X11/Xwrapper.config
 install -m 0644 "$SCRIPT_DIR/hardening/10-thinpi-kiosk.conf" /etc/X11/xorg.conf.d/10-thinpi-kiosk.conf
 install -m 0644 "$SCRIPT_DIR/hardening/99-thinpi-ssh.conf" /etc/ssh/sshd_config.d/99-thinpi.conf
+if [ "$PLATFORM" = raspberry-pi ]; then
+  sed -i 's/^needs_root_rights=auto$/needs_root_rights=yes/' /etc/X11/Xwrapper.config
+  install -m 0755 "$SCRIPT_DIR/configure-pi-xorg.sh" /usr/local/libexec/thinpi-configure-pi-xorg
+  install -d -o root -g root -m 0755 /etc/systemd/system/thinpi-ui.service.d
+  install -m 0644 "$SCRIPT_DIR/thinpi-ui-pi.conf" /etc/systemd/system/thinpi-ui.service.d/raspberry-pi.conf
+  /usr/local/libexec/thinpi-configure-pi-xorg
+fi
 if [ "$DISABLE_SSH_PASSWORDS" = true ]; then
   printf '%s\n' 'PasswordAuthentication no' 'KbdInteractiveAuthentication no' > /etc/ssh/sshd_config.d/00-thinpi-passwords.conf
   chmod 0644 /etc/ssh/sshd_config.d/00-thinpi-passwords.conf
@@ -285,7 +296,7 @@ chmod 0600 /etc/thinpi/device.json
 systemctl disable --now display-manager.service lightdm.service gdm.service sddm.service 2>/dev/null || true
 systemctl mask getty@tty1.service getty@tty2.service getty@tty3.service getty@tty4.service getty@tty5.service getty@tty6.service getty@tty7.service
 systemctl daemon-reload
-systemctl enable thinpi-agent.service thinpi-ui.service thinpi.target
+systemctl enable thinpi-agent.service thinpi-ui.service
 systemctl set-default thinpi.target
 sshd -t
 xfreerdp3 /help >/var/log/thinpi-freerdp-help.txt 2>&1 || xfreerdp /help >/var/log/thinpi-freerdp-help.txt 2>&1 || true

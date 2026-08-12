@@ -4,6 +4,3 @@ Requires=multi-user.target thinpi-agent.service thinpi-ui.service
 Wants=network-online.target
 After=multi-user.target network-online.target thinpi-agent.service
 AllowIsolate=yes
-
-[Install]
-Alias=default.target
