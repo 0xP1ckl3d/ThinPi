@@ -69,7 +69,22 @@
 
       <section id="settings" class="view">
         <div class="page-heading"><div><p class="eyebrow">Thin client behaviour</p><h1>Kiosk settings</h1><p>Controller-managed settings shared by Lubuntu and Raspberry Pi clients.</p></div></div>
-        <article class="panel"><div class="panel-heading"><div><h2>Display and sign-in</h2><p>Clients check for changes every minute. Active remote sessions always keep the display awake.</p></div></div><form id="kiosk-settings-form" class="form-grid"><label>Turn display off after inactivity (minutes)<input name="screen_sleep_minutes" type="number" min="0" max="1440" required><small>Use 0 to disable display sleep</small></label><label>Client colour palette<select name="client_theme"><option value="ocean">Ocean</option><option value="graphite">Graphite</option><option value="forest">Forest</option><option value="sunset">Sunset</option><option value="high-contrast">High contrast</option></select></label><label>SSH shell appearance<select name="terminal_theme"><option value="dark">Dark</option><option value="light">Light</option></select><small>Applies to SSH connection shells</small></label><label class="check"><input name="show_user_list" type="checkbox"> Show users on the sign-in screen</label><button class="primary">Save kiosk settings</button></form></article>
+        <article class="panel">
+          <div class="panel-heading"><div><h2>Display and sign-in</h2><p>Clients check for changes every minute. Active remote sessions always keep the display awake.</p></div></div>
+          <form id="kiosk-settings-form" class="form-grid">
+            <label>Turn display off after inactivity (minutes)<input name="screen_sleep_minutes" type="number" min="0" max="1440" required><small>Use 0 to disable display sleep</small></label>
+            <label>SSH shell appearance<select name="terminal_theme"><option value="dark">Dark</option><option value="light">Light</option></select><small>Applies to SSH connection shells</small></label>
+            <label class="check"><input name="show_user_list" type="checkbox"> Show users on the sign-in screen</label>
+            <fieldset class="palette-field wide"><legend>Client and controller colour palette</legend><p>Choose a preview. The palette applies to this controller and every ThinPi client.</p><div class="palette-options">
+              <label class="palette-option" data-palette="ocean"><input type="radio" name="client_theme" value="ocean"><span class="palette-preview"><i></i><i></i><i></i></span><strong>Ocean</strong></label>
+              <label class="palette-option" data-palette="graphite"><input type="radio" name="client_theme" value="graphite"><span class="palette-preview"><i></i><i></i><i></i></span><strong>Graphite</strong></label>
+              <label class="palette-option" data-palette="forest"><input type="radio" name="client_theme" value="forest"><span class="palette-preview"><i></i><i></i><i></i></span><strong>Forest</strong></label>
+              <label class="palette-option" data-palette="sunset"><input type="radio" name="client_theme" value="sunset"><span class="palette-preview"><i></i><i></i><i></i></span><strong>Sunset</strong></label>
+              <label class="palette-option" data-palette="high-contrast"><input type="radio" name="client_theme" value="high-contrast"><span class="palette-preview"><i></i><i></i><i></i></span><strong>High contrast</strong></label>
+            </div></fieldset>
+            <button class="primary">Save kiosk settings</button>
+          </form>
+        </article>
       </section>
 
       <section id="credentials" class="view">

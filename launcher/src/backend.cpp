@@ -65,7 +65,8 @@ bool Backend::eventFilter(QObject *watched, QEvent *event) {
   return QObject::eventFilter(watched, event);
 }
 void Backend::armIdleLock() {
-  if (!m_token.isEmpty() && m_view != "session" && m_idleMinutes > 0)
+  if (!m_token.isEmpty() && !m_sessionActive && m_view != "session" &&
+      m_idleMinutes > 0)
     m_idle.start(m_idleMinutes * 60000);
 }
 void Backend::setSessionActive(bool active) {
@@ -74,6 +75,12 @@ void Backend::setSessionActive(bool active) {
     return;
   m_sessionActive = active;
   emit sessionActiveChanged();
+}
+void Backend::setSessionMinimized(bool minimized) {
+  if (m_sessionMinimized == minimized)
+    return;
+  m_sessionMinimized = minimized;
+  emit sessionMinimizedChanged();
 }
 void Backend::configureScreenSleep(bool sessionActive) {
   if (m_devMode)
@@ -102,6 +109,11 @@ void Backend::clearLocalSession() {
   m_keepalive.stop();
   clearClipboard();
   setSessionActive(false);
+  setSessionMinimized(false);
+  if (m_activeConnectionID != 0) {
+    m_activeConnectionID = 0;
+    emit activeConnectionIDChanged();
+  }
   emit restrictionMessageChanged();
   emit isAdminChanged();
   emit usernameChanged();
@@ -391,8 +403,7 @@ void Backend::openAdministration() {
         m_adminBrowser = new QProcess(this);
         m_adminBrowser->setProgram(browser);
         m_adminBrowser->setArguments(
-            {QStringLiteral("--new-window"),
-             QStringLiteral("--start-maximized"),
+            {QStringLiteral("--start-maximized"),
              QStringLiteral("--user-data-dir=") + m_adminProfile,
              QStringLiteral("--no-first-run"),
              QStringLiteral("--no-default-browser-check"),
@@ -409,7 +420,7 @@ void Backend::openAdministration() {
              QStringLiteral("--disable-features=KeyboardLockAPI"),
              QStringLiteral("--password-store=basic"),
              QStringLiteral("--overscroll-history-navigation=0"),
-             url.toString()});
+             QStringLiteral("--app=") + url.toString()});
         connect(m_adminBrowser,
                 qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this,
                 [this]() {
@@ -482,7 +493,17 @@ void Backend::launch(int row) {
   const auto id = m_connections.idAt(row);
   if (id == 0)
     return;
-  m_activeConnectionID = id;
+  if (m_sessionActive) {
+    if (id == m_activeConnectionID && m_sessionMinimized) {
+      resumeSession();
+      return;
+    }
+    m_error = id == m_activeConnectionID
+                  ? "This connection is already open."
+                  : "Another connection is still active. Minimise or end it before opening a different connection.";
+    emit errorMessageChanged();
+    return;
+  }
   if (!m_restrictionMessage.isEmpty()) {
     fail(m_restrictionMessage);
     return;
@@ -491,6 +512,8 @@ void Backend::launch(int row) {
     fail("The local ThinPi service is unavailable.");
     return;
   }
+  m_activeConnectionID = id;
+  emit activeConnectionIDChanged();
   m_seenActive = false;
   m_sessionExpired = false;
   m_idle.stop();
@@ -560,6 +583,10 @@ void Backend::pollAgent() {
       m_sessionMessage = m_activeName + " — " + m_activeProtocol;
       emit sessionMessageChanged();
       setSessionActive(true);
+      const auto minimized = status["minimized"].toBool();
+      setSessionMinimized(minimized);
+      if (minimized && m_view == "session")
+        setView("dashboard");
       if (!m_keepalive.isActive()) {
         keepSessionAlive();
         m_keepalive.start();
@@ -569,6 +596,7 @@ void Backend::pollAgent() {
       m_poll.stop();
       m_keepalive.stop();
       setSessionActive(false);
+      setSessionMinimized(false);
       const auto confirmation = status["confirmation"].toObject();
       m_sshHostKeyConfirmation =
           confirmation["kind"].toString() == "ssh_host_key_changed";
@@ -580,8 +608,13 @@ void Backend::pollAgent() {
       m_poll.stop();
       m_keepalive.stop();
       setSessionActive(false);
+      setSessionMinimized(false);
       m_sessionMessage.clear();
       emit sessionMessageChanged();
+      if (m_activeConnectionID != 0) {
+        m_activeConnectionID = 0;
+        emit activeConnectionIDChanged();
+      }
       if (m_sessionExpired) {
         clearLocalSession();
       } else {
@@ -593,6 +626,30 @@ void Backend::pollAgent() {
 }
 void Backend::endSession() {
   agentRequest({{"action", "cancel"}}, [](QJsonObject) {});
+}
+void Backend::minimizeSession() {
+  if (!m_sessionActive || m_sessionMinimized)
+    return;
+  agentRequest({{"action", "minimize"}}, [this](QJsonObject response) {
+    if (!response["accepted"].toBool()) {
+      m_error = "The active connection could not be minimized.";
+      emit errorMessageChanged();
+      return;
+    }
+    setSessionMinimized(true);
+    setView("dashboard");
+  });
+}
+void Backend::resumeSession() {
+  agentRequest({{"action", "resume"}}, [this](QJsonObject response) {
+    if (!response["accepted"].toBool()) {
+      m_error = "The minimized connection is no longer available.";
+      emit errorMessageChanged();
+      return;
+    }
+    setSessionMinimized(false);
+    setView("session");
+  });
 }
 void Backend::resolveSSHHostKey(bool accept) {
   agentRequest({{"action", "resolve_ssh_host_key"}, {"accept", accept}},

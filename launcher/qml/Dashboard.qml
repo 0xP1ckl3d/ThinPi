@@ -45,7 +45,7 @@ Rectangle {
             cellHeight: 190
             clip: true
             model: backend.connections
-            delegate: ConnectionTile { width: 288; height: 168; title: connectionName; subtitle: description; badge: protocol; onActivated: backend.launch(index) }
+            delegate: ConnectionTile { width: 288; height: 168; title: connectionName; subtitle: description; badge: protocol; minimized: backend.sessionMinimized && connectionId === backend.activeConnectionID; onActivated: backend.launch(index) }
             Label { anchors.centerIn: parent; visible: grid.count===0&&!backend.busy; text: "No remote systems have been assigned to you."; color: "#9fb0c8"; font.pixelSize: 18 }
         }
         BusyIndicator { running: backend.busy; visible: running; Layout.alignment: Qt.AlignHCenter }

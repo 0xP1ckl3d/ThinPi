@@ -40,6 +40,7 @@ type ClientInfo struct {
 type Status struct {
 	State               State         `json:"state"`
 	ActiveSession       *string       `json:"active_session"`
+	Minimized           bool          `json:"minimized"`
 	ControllerReachable bool          `json:"controller_reachable"`
 	FreeRDP             ClientInfo    `json:"freerdp"`
 	Moonlight           ClientInfo    `json:"moonlight"`
@@ -90,6 +91,11 @@ type Clients struct {
 }
 type Runner interface {
 	Run(context.Context, Command) error
+}
+
+type WindowController interface {
+	Minimize() (string, error)
+	Resume(string) error
 }
 
 type ClientRuntimeError struct {
@@ -175,10 +181,12 @@ type Manager struct {
 	clients      Clients
 	sshTrust     *SSHTrustStore
 	pendingSSH   *PendingSSHHostKey
+	windows      WindowController
+	windowID     string
 }
 
 func NewManager(c Controller, r Runner, mock bool, d time.Duration, clients Clients) *Manager {
-	return &Manager{controller: c, runner: r, mock: mock, mockDuration: d, clients: clients, sshTrust: NewSSHTrustStore(defaultSSHKnownHostsPath()), status: Status{State: Idle, ControllerReachable: true, FreeRDP: clients.FreeRDP, Moonlight: clients.Moonlight, VNC: clients.VNC, SSH: clients.SSH}, log: slog.New(slog.NewTextHandler(io.Discard, nil))}
+	return &Manager{controller: c, runner: r, mock: mock, mockDuration: d, clients: clients, sshTrust: NewSSHTrustStore(defaultSSHKnownHostsPath()), status: Status{State: Idle, ControllerReachable: true, FreeRDP: clients.FreeRDP, Moonlight: clients.Moonlight, VNC: clients.VNC, SSH: clients.SSH}, log: slog.New(slog.NewTextHandler(io.Discard, nil)), windows: newWindowController()}
 }
 
 func (m *Manager) SetLogger(log *slog.Logger) {
@@ -192,6 +200,10 @@ func (m *Manager) set(state State, id *string, err error) {
 	defer m.mu.Unlock()
 	m.status.State = state
 	m.status.ActiveSession = id
+	if state != Active {
+		m.status.Minimized = false
+		m.windowID = ""
+	}
 	if err != nil {
 		m.status.LastError = err.Error()
 	} else if state == Idle {
@@ -379,6 +391,48 @@ func (m *Manager) Cancel() error {
 	}
 	m.status.State = Stopping
 	m.cancel()
+	return nil
+}
+
+func (m *Manager) Minimize() error {
+	m.mu.Lock()
+	if m.status.State != Active || m.status.Minimized {
+		m.mu.Unlock()
+		return errors.New("no visible active session")
+	}
+	windows := m.windows
+	m.mu.Unlock()
+	windowID, err := windows.Minimize()
+	if err != nil {
+		return err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.status.State != Active {
+		return errors.New("session ended while it was being minimized")
+	}
+	m.windowID = windowID
+	m.status.Minimized = true
+	return nil
+}
+
+func (m *Manager) Resume() error {
+	m.mu.Lock()
+	if m.status.State != Active || !m.status.Minimized || m.windowID == "" {
+		m.mu.Unlock()
+		return errors.New("no minimized session")
+	}
+	windows, windowID := m.windows, m.windowID
+	m.mu.Unlock()
+	if err := windows.Resume(windowID); err != nil {
+		return err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.status.State != Active {
+		return errors.New("session ended while it was being restored")
+	}
+	m.status.Minimized = false
 	return nil
 }
 

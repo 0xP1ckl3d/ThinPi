@@ -57,9 +57,9 @@ if systemctl list-unit-files thinpi-agent.service --no-legend 2>/dev/null | grep
     sudo apt-get update
     sudo apt-get install -y libnss3-tools
   }
-  if ! command -v xbindkeys >/dev/null 2>&1 || ! command -v pkill >/dev/null 2>&1; then
+  if ! command -v xbindkeys >/dev/null 2>&1 || ! command -v xdotool >/dev/null 2>&1 || ! command -v pkill >/dev/null 2>&1; then
     sudo apt-get update
-    sudo apt-get install -y --no-install-recommends xbindkeys procps
+    sudo apt-get install -y --no-install-recommends xbindkeys xdotool procps
   fi
   # /etc/thinpi is intentionally inaccessible to the SSH deployment user.
   # Read the controller URL through sudo; do not hide a failed read behind a

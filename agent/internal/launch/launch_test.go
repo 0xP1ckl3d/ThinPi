@@ -305,3 +305,38 @@ func TestMockRunnerHonoursDurationAndCancellation(t *testing.T) {
 		t.Fatalf("cancel error=%v", err)
 	}
 }
+
+type fakeWindowController struct {
+	minimized string
+	resumed   string
+}
+
+func (f *fakeWindowController) Minimize() (string, error) {
+	f.minimized = "4242"
+	return f.minimized, nil
+}
+func (f *fakeWindowController) Resume(windowID string) error {
+	f.resumed = windowID
+	return nil
+}
+
+func TestManagerMinimizesAndResumesSameActiveWindow(t *testing.T) {
+	m := NewManager(&fakeController{}, &blockingRunner{}, false, time.Second, Clients{})
+	windows := &fakeWindowController{}
+	m.windows = windows
+	sessionID := "session-1"
+	m.status.State = Active
+	m.status.ActiveSession = &sessionID
+	if err := m.Minimize(); err != nil {
+		t.Fatal(err)
+	}
+	if status := m.Status(); !status.Minimized || windows.minimized != "4242" {
+		t.Fatalf("session was not minimized: %#v", status)
+	}
+	if err := m.Resume(); err != nil {
+		t.Fatal(err)
+	}
+	if status := m.Status(); status.Minimized || windows.resumed != "4242" {
+		t.Fatalf("same session window was not resumed: %#v", status)
+	}
+}

@@ -63,6 +63,18 @@ func (s *Server) handle(c net.Conn) {
 			return
 		}
 		write(c, map[string]any{"accepted": true})
+	case "minimize":
+		if err := s.Manager.Minimize(); err != nil {
+			write(c, map[string]any{"accepted": false, "error": "No visible remote session is active."})
+			return
+		}
+		write(c, map[string]any{"accepted": true})
+	case "resume":
+		if err := s.Manager.Resume(); err != nil {
+			write(c, map[string]any{"accepted": false, "error": "The minimized remote session is no longer available."})
+			return
+		}
+		write(c, map[string]any{"accepted": true})
 	case "resolve_ssh_host_key":
 		if err := s.Manager.ResolveSSHHostKeyChange(q.Accept); err != nil {
 			write(c, map[string]any{"accepted": false, "error": "No SSH host-key change is awaiting confirmation."})

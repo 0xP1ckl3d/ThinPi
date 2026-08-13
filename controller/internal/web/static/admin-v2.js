@@ -98,6 +98,12 @@ function renderSettings() {
   form.elements.show_user_list.checked = !!state.settings.show_user_list;
   form.elements.terminal_theme.value = state.settings.terminal_theme;
   form.elements.client_theme.value = state.settings.client_theme;
+  applyControllerTheme(state.settings.client_theme);
+}
+
+function applyControllerTheme(theme) {
+  const allowed = ['ocean','graphite','forest','sunset','high-contrast'];
+  document.documentElement.dataset.theme = allowed.includes(theme) ? theme : 'ocean';
 }
 
 function renderCredentials() {
@@ -159,6 +165,7 @@ $('#permission-form').onsubmit = event => { event.preventDefault(); submit(event
 $('#membership-form').onsubmit = event => { event.preventDefault(); submit(event.target,'/memberships',{user_id:Number,group_id:Number,member:v=>v==='on'}); };
 $('#token-form').onsubmit = async event => { event.preventDefault(); try { const data=formData(event.target,{ttl_minutes:Number}); const result=await api('/enrolment-tokens',{method:'POST',body:JSON.stringify(data)}); $('#new-token').textContent=result.token; note('Enrolment token created'); } catch(error){note(error.message,true);} };
 $('#kiosk-settings-form').onsubmit = event => { event.preventDefault(); const form=event.target; update('/settings/1',{screen_sleep_minutes:Number(form.elements.screen_sleep_minutes.value),show_user_list:form.elements.show_user_list.checked,terminal_theme:form.elements.terminal_theme.value,client_theme:form.elements.client_theme.value},'Kiosk settings saved'); };
+document.querySelectorAll('#kiosk-settings-form [name=client_theme]').forEach(input => input.onchange = () => applyControllerTheme(input.value));
 $('#connection-form').onsubmit = event => { event.preventDefault(); const data=formData(event.target,{port:Number,sort_order:Number,enabled:v=>v==='on',credential_id:v=>v?Number(v):null,protocol_config:v=>JSON.parse(v||'{}')}); if(data.protocol==='ssh')data.protocol_config={terminal_title:data.ssh_terminal_title.trim()||'Secure shell'};else if(data.protocol==='rdp')data.protocol_config={...data.protocol_config,certificate_mode:data.rdp_certificate_mode}; delete data.ssh_terminal_title;delete data.rdp_certificate_mode; submitData(event.target,'/connections',data); };
 $('#perm-subject-type').onchange = fillSelectors;
 

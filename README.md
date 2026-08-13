@@ -58,6 +58,10 @@ the kiosk remains running.
   including for selecting and copying text in shells.
 - Windows/Command+L ends any active remote connection, closes the managed
   administration browser, revokes the dashboard session, and returns to login.
+- Active connections have a VMware-style control strip at the top edge. Move
+  the pointer to its position to reveal it, drag it along the top, optionally
+  pin it, or use it to minimise or close the connection. A minimised connection
+  is marked on its card; selecting that card restores the same live session.
 - Display sleep is suspended while a remote session is active.
 - User inactivity logout remains independently configurable in each user's
   controller policy.

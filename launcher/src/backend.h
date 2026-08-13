@@ -25,6 +25,10 @@ class Backend final : public QObject {
   Q_PROPERTY(bool busy READ busy NOTIFY busyChanged)
   Q_PROPERTY(bool isAdmin READ isAdmin NOTIFY isAdminChanged)
   Q_PROPERTY(bool sessionActive READ sessionActive NOTIFY sessionActiveChanged)
+  Q_PROPERTY(bool sessionMinimized READ sessionMinimized NOTIFY
+                 sessionMinimizedChanged)
+  Q_PROPERTY(qint64 activeConnectionID READ activeConnectionID NOTIFY
+                 activeConnectionIDChanged)
   Q_PROPERTY(bool sshHostKeyConfirmation READ sshHostKeyConfirmation NOTIFY
                  sshHostKeyConfirmationChanged)
   Q_PROPERTY(QString clientTheme READ clientTheme NOTIFY clientThemeChanged)
@@ -47,6 +51,8 @@ public:
   bool busy() const { return m_busy; }
   bool isAdmin() const { return m_isAdmin; }
   bool sessionActive() const { return m_sessionActive; }
+  bool sessionMinimized() const { return m_sessionMinimized; }
+  qint64 activeConnectionID() const { return m_activeConnectionID; }
   bool devMode() const { return m_devMode; }
   bool sshHostKeyConfirmation() const { return m_sshHostKeyConfirmation; }
   ConnectionModel *connections() { return &m_connections; }
@@ -65,6 +71,7 @@ public:
                                  const QString &currentPassword,
                                  const QString &newPassword);
   Q_INVOKABLE void endSession();
+  Q_INVOKABLE void minimizeSession();
   Q_INVOKABLE void dismissError();
   Q_INVOKABLE void retry();
   Q_INVOKABLE void resolveSSHHostKey(bool accept);
@@ -82,6 +89,8 @@ signals:
   void restrictionMessageChanged();
   void isAdminChanged();
   void sessionActiveChanged();
+  void sessionMinimizedChanged();
+  void activeConnectionIDChanged();
   void sshHostKeyConfirmationChanged();
   void profileUpdated();
   void clientThemeChanged();
@@ -104,6 +113,8 @@ private:
   void loadLoginUsers();
   void keepSessionAlive();
   void setSessionActive(bool active);
+  void setSessionMinimized(bool minimized);
+  void resumeSession();
   void configureScreenSleep(bool sessionActive);
   void closeAdministrationBrowser();
   void retainClipboard();
@@ -123,6 +134,7 @@ private:
   bool m_busy = false, m_isAdmin = false, m_devMode = false,
        m_seenActive = false, m_sessionActive = false, m_sessionExpired = false,
        m_hasMoreUsers = false, m_sshHostKeyConfirmation = false;
+  bool m_sessionMinimized = false;
   bool m_updatingClipboard = false;
   QProcess *m_adminBrowser = nullptr;
   QString m_adminProfile;

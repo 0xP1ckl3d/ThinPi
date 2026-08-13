@@ -14,5 +14,5 @@ ApplicationWindow {
     Component { id: session; SessionOverlay {} }
     Component { id: offline; Rectangle { color: root.color; ColumnLayout { anchors.centerIn: parent; spacing: 20; Label { text: "Controller unavailable"; color: "white"; font.pixelSize: 34 } Label { text: backend.errorMessage; color: "#aebed2"; wrapMode: Text.Wrap; Layout.maximumWidth: 600 } ThinButton { text: "Try again"; variant: "primary"; Layout.alignment: Qt.AlignHCenter; onClicked: backend.retry() } } } }
     ErrorDialog { visible: backend.errorMessage.length > 0 && backend.view !== "offline"; message: backend.errorMessage; confirmSSHHostKey: backend.sshHostKeyConfirmation; onClosed: { if (!backend.sshHostKeyConfirmation) backend.dismissError() } }
-    Connections { target: backend; function onSessionActiveChanged() { if (backend.devMode) return; if (backend.sessionActive) root.hide(); else { root.showFullScreen(); root.raise(); root.requestActivate(); } } }
+    SessionControls { visible: backend.sessionActive && !backend.sessionMinimized }
 }

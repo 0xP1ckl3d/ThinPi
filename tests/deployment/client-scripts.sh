@@ -68,6 +68,9 @@ grep -F 'ExecStart=/usr/sbin/runuser -u thinpi -- /usr/bin/xinit' "$ROOT/deploy/
 grep -F 'ExecStartPost=/usr/bin/chvt 7' "$ROOT/deploy/client/thinpi-ui-pi.service" >/dev/null
 grep -F 'xbindkeys -n -f /usr/local/libexec/thinpi-xbindkeysrc' "$ROOT/deploy/client/xinitrc" >/dev/null
 grep -F 'Mod4 + l' "$ROOT/deploy/client/thinpi-xbindkeysrc" >/dev/null
+grep -F 'Mod4 + m' "$ROOT/deploy/client/thinpi-xbindkeysrc" >/dev/null
+grep -F 'xbindkeys xdotool procps' "$ROOT/deploy/client/stage.sh" >/dev/null
+grep -F 'xbindkeys xdotool procps' "$ROOT/deploy/client/provision.sh" >/dev/null
 grep -F 'screen_sleep_minutes' "$ROOT/launcher/src/backend.cpp" >/dev/null
 grep -F 'matchbox-window-manager -use_titlebar no &' "$ROOT/deploy/client/xinitrc" >/dev/null
 ! grep -F -- '-use_cursor no' "$ROOT/deploy/client/xinitrc" >/dev/null

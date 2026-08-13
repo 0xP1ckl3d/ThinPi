@@ -404,6 +404,9 @@ Then test:
 - session time limit ends the client and reports the reason;
 - the display powers down after the configured idle period and wakes on input;
 - Windows/Command+L disconnects an active session and returns to login.
+- moving the pointer to the top-edge connection strip reveals draggable,
+  optionally pinned Minimise and Close controls; selecting the marked card
+  restores the same minimised live session;
 
 ## 12. Production configuration files
 

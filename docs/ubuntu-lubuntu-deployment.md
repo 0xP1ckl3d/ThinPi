@@ -335,6 +335,10 @@ origin, a second SSH tab, virtual terminals, downloads, or developer tools.
 Also verify that the display powers down after the configured idle period and
 wakes on keyboard or mouse input. Windows/Command+L must close any active native
 session, sign out the dashboard user, and return to the ThinPi login screen.
+During a native session, move the pointer to the compact strip's position at
+the top edge to reveal Minimise, Close and Pin controls. The strip can be dragged
+along the top. Selecting the marked connection card restores the same live
+minimised session.
 
 If the kiosk fails, do not reinstall blindly. SSH still works with the key:
 

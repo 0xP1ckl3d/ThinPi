@@ -7,7 +7,7 @@ Rectangle {
     ColumnLayout { visible: backend.busy || !backend.devMode; anchors.centerIn: parent; spacing: 20
         BusyIndicator { running: true; Layout.alignment: Qt.AlignHCenter; implicitWidth: 64; implicitHeight: 64 }
         Label { text: backend.sessionMessage; color: "white"; font.pixelSize: 28; Layout.alignment: Qt.AlignHCenter }
-        Label { text: "The dashboard will return when the remote session ends."; color: "#9fb0c8"; font.pixelSize: 16; Layout.alignment: Qt.AlignHCenter }
+        Label { text: "Use the controls at the top of the connection, or press Windows/Command+M to minimise it."; color: "#9fb0c8"; font.pixelSize: 16; Layout.alignment: Qt.AlignHCenter }
         ThinButton { text: "End session"; variant: "danger"; Layout.alignment: Qt.AlignHCenter; onClicked: backend.endSession() }
     }
     Rectangle { visible: backend.devMode && !backend.busy; anchors.fill: parent; color: "#18324b"
