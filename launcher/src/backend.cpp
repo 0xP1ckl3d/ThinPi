@@ -100,6 +100,37 @@ bool Backend::pointerAtScreenTop() const {
   const auto *screen = QGuiApplication::screenAt(position);
   return screen && position.y() <= screen->geometry().top() + 1;
 }
+int Backend::pointerX() const { return QCursor::pos().x(); }
+bool Backend::pointerOverToolbar(int left, int width, int height) const {
+  const auto position = QCursor::pos();
+  return position.x() >= left && position.x() < left + width &&
+         position.y() >= 0 && position.y() < height;
+}
+void Backend::beginToolbarInteraction() {
+  const auto xdotool = QStandardPaths::findExecutable("xdotool");
+  if (xdotool.isEmpty())
+    return;
+  QProcess process;
+  process.start(xdotool, {QStringLiteral("getactivewindow")});
+  if (!process.waitForFinished(250))
+    return;
+  bool valid = false;
+  const auto window = QString::fromUtf8(process.readAllStandardOutput()).trimmed();
+  window.toULongLong(&valid);
+  if (valid)
+    m_toolbarReturnWindow = window;
+}
+void Backend::endToolbarInteraction() {
+  if (m_toolbarReturnWindow.isEmpty())
+    return;
+  const auto xdotool = QStandardPaths::findExecutable("xdotool");
+  const auto window = m_toolbarReturnWindow;
+  m_toolbarReturnWindow.clear();
+  if (!xdotool.isEmpty())
+    QProcess::startDetached(
+        xdotool,
+        {QStringLiteral("windowactivate"), QStringLiteral("--sync"), window});
+}
 void Backend::configureScreenSleep(bool sessionActive) {
   if (m_devMode)
     return;

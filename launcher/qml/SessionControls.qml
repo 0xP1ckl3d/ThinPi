@@ -8,21 +8,44 @@ Window {
     property bool revealed: false
     property bool pinned: false
     property bool dragging: false
+    property bool interacting: false
+    property real dragOffsetX: 0
     readonly property bool deployed: revealed || pinned || dragging
     width: 340
     height: 42
     x: Math.round((Screen.width - width) / 2)
     y: deployed ? 0 : -height
     color: "transparent"
-    flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.X11BypassWindowManagerHint | Qt.WindowDoesNotAcceptFocus
+    flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.X11BypassWindowManagerHint
+    function activateInteraction() {
+        if (interacting)
+            return
+        backend.beginToolbarInteraction()
+        interacting = true
+        controls.raise()
+        controls.requestActivate()
+    }
+    function deactivateInteraction() {
+        if (!interacting)
+            return
+        interacting = false
+        backend.endToolbarInteraction()
+    }
     onVisibleChanged: {
+        if (!visible)
+            deactivateInteraction()
         revealed = false
         pinned = false
         dragging = false
         if (visible)
             edgePoll.restart()
     }
-    onDeployedChanged: if (deployed) controls.raise()
+    onDeployedChanged: {
+        if (deployed)
+            controls.raise()
+        else
+            deactivateInteraction()
+    }
     Behavior on y { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
 
     Theme { id: theme; paletteName: backend.clientTheme }
@@ -61,18 +84,17 @@ Window {
 
                 DragHandler {
                     target: null
-                    property real startX: 0
                     onActiveChanged: {
                         controls.dragging = active
                         if (active) {
                             hideTimer.stop()
                             controls.revealed = true
-                            startX = controls.x
+                            controls.activateInteraction()
+                            controls.dragOffsetX = backend.pointerX() - controls.x
                         } else if (!controls.pinned) {
                             hideTimer.restart()
                         }
                     }
-                    onTranslationChanged: controls.x = Math.max(0, Math.min(Screen.width - controls.width, startX + translation.x))
                 }
             }
 
@@ -119,6 +141,7 @@ Window {
                 if (hovered) {
                     hideTimer.stop()
                     controls.revealed = true
+                    controls.activateInteraction()
                 } else if (!controls.pinned && !controls.dragging) {
                     hideTimer.restart()
                 }
@@ -135,8 +158,34 @@ Window {
             if (backend.pointerAtScreenTop()) {
                 controls.revealed = true
                 controls.raise()
+                controls.activateInteraction()
             }
         }
+    }
+    Timer {
+        id: pointerPresence
+        interval: 60
+        repeat: true
+        running: controls.visible && controls.deployed
+        onTriggered: {
+            if (controls.dragging)
+                return
+            if (backend.pointerOverToolbar(controls.x, controls.width, controls.height)) {
+                hideTimer.stop()
+                controls.activateInteraction()
+            } else {
+                controls.deactivateInteraction()
+                if (!controls.pinned && !hideTimer.running)
+                    hideTimer.restart()
+            }
+        }
+    }
+    Timer {
+        id: dragTimer
+        interval: 16
+        repeat: true
+        running: controls.visible && controls.dragging
+        onTriggered: controls.x = Math.max(0, Math.min(Screen.width - controls.width, backend.pointerX() - controls.dragOffsetX))
     }
     Timer {
         id: raiseTimer

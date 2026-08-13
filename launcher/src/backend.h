@@ -81,6 +81,10 @@ public:
   Q_INVOKABLE void endSession();
   Q_INVOKABLE void minimizeSession();
   Q_INVOKABLE bool pointerAtScreenTop() const;
+  Q_INVOKABLE int pointerX() const;
+  Q_INVOKABLE bool pointerOverToolbar(int left, int width, int height) const;
+  Q_INVOKABLE void beginToolbarInteraction();
+  Q_INVOKABLE void endToolbarInteraction();
   Q_INVOKABLE QString connectionSessionState(qint64 connectionID) const;
   Q_INVOKABLE void dismissError();
   Q_INVOKABLE void retry();
@@ -157,5 +161,5 @@ private:
   bool m_sessionMinimized = false;
   bool m_updatingClipboard = false;
   QProcess *m_adminBrowser = nullptr;
-  QString m_adminProfile;
+  QString m_adminProfile, m_toolbarReturnWindow;
 };
