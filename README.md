@@ -35,9 +35,26 @@ the kiosk remains running.
 ## Kiosk behaviour
 
 - The display powers down after 15 minutes without local keyboard or mouse
-  activity by default. Set `--screen-sleep-minutes` during provisioning, or
-  change `THINPI_SCREEN_SLEEP_MINUTES` in `/etc/thinpi/ui.env` and restart
-  `thinpi-ui`. Use `0` to disable display sleep.
+  activity by default. Administrators control the timeout from **Kiosk
+  settings** in the controller; use `0` to disable display sleep. Clients pick
+  up changes within one minute without reprovisioning.
+- Administrators can show the most recently used accounts on the sign-in screen
+  or require everyone to enter their username manually.
+- **Kiosk settings** also provides Ocean, Graphite, Forest, Sunset and High
+  Contrast client palettes plus dark/light shell appearance. Clients apply
+  palette changes within one minute.
+- Administrators can add or replace each person's profile photo from **People**.
+  Photos are resized in the browser and displayed on the kiosk login and
+  dashboard screens.
+- The signed-in user has one text clipboard across RDP, VNC, SSH, the controller
+  administration browser and local maintenance shell. It survives changing
+  connections and is cleared at ThinPi sign-out.
+- Moonlight can type client clipboard text into its host with its
+  Ctrl+Alt+Shift+V shortcut, but the upstream GameStream protocol cannot copy
+  host clipboard content back to ThinPi.
+- The login and dashboard can be operated with Tab/Shift+Tab, Enter, Space and
+  Escape. A normal pointer remains available whenever a mouse is attached,
+  including for selecting and copying text in shells.
 - Windows/Command+L ends any active remote connection, closes the managed
   administration browser, revokes the dashboard session, and returns to login.
 - Display sleep is suspended while a remote session is active.

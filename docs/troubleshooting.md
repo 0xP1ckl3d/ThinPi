@@ -232,15 +232,36 @@ sudo journalctl -b -u thinpi-ui --no-pager
 ### Display does not sleep or sleeps during a remote session
 
 ```sh
-grep THINPI_SCREEN_SLEEP_MINUTES /etc/thinpi/ui.env
 sudo -u thinpi env DISPLAY=:0 XAUTHORITY=/home/thinpi/.Xauthority xset q
 sudo journalctl -b -u thinpi-ui --no-pager
 ```
 
-The timeout must be an integer from `0` through `1440`; `0` disables sleep.
-ThinPi configures Xorg DPMS while the login or dashboard is visible and disables
-DPMS while a native session is connecting or active. After changing the value,
-restart the UI with `sudo systemctl restart thinpi-ui`.
+Check **Kiosk settings** in the controller administration application. The
+timeout must be an integer from `0` through `1440`; `0` disables sleep. Clients
+poll this controller setting every minute. ThinPi configures Xorg DPMS while the
+login or dashboard is visible and disables DPMS while a native session is
+connecting or active.
+
+### Clipboard, profile photo, palette or shell theme does not update
+
+Confirm the controller is returning the current kiosk configuration:
+
+```sh
+curl -fsS https://controller.example/api/v1/login-users | jq .configuration
+sudo journalctl -b -u thinpi-ui -u thinpi-agent --no-pager
+```
+
+The launcher checks the controller every minute. RDP and VNC clipboard
+redirection is enforced by ThinPi, while SSH and local maintenance use the Xorg
+text clipboard. Sign-out intentionally clears it. Profile photos must be PNG,
+JPEG or WebP; the admin browser resizes them before upload. If keyboard focus is
+unclear, press Tab: the focused control receives the selected palette's accent
+outline, and Enter or Space activates it.
+
+Moonlight is the protocol exception: Ctrl+Alt+Shift+V types the ThinPi clipboard
+into the Sunshine host, but GameStream does not provide a host-to-client
+clipboard channel. Copying content out of a Moonlight host therefore cannot be
+made part of the shared clipboard without separate software on that host.
 
 ### FreeRDP unavailable or exits immediately
 

@@ -28,6 +28,7 @@ qt_add_qml_module(thinpi-launcher
         qml/ThinButton.qml
         qml/ThinTextField.qml
         qml/PasswordField.qml
+        qml/Theme.qml
     RESOURCES assets/thinpi.svg
 )
 

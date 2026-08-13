@@ -4,12 +4,14 @@ import QtQuick.Layouts
 
 Rectangle {
     id: loginRoot
-    color: "#07111e"
+    Theme { id: theme; paletteName: backend.clientTheme }
+    color: theme.background
+    focus: true
     property string selectedUsername: ""
     property string selectedDisplayName: ""
     property bool manualUsername: false
 
-    Rectangle { anchors.fill: parent; gradient: Gradient { GradientStop { position: 0; color: "#0d2035" } GradientStop { position: 0.55; color: "#07111e" } GradientStop { position: 1; color: "#06101b" } } }
+    Rectangle { anchors.fill: parent; gradient: Gradient { GradientStop { position: 0; color: theme.backgroundAlt } GradientStop { position: 0.55; color: theme.background } GradientStop { position: 1; color: Qt.darker(theme.background,1.08) } } }
     Rectangle { width: 520; height: 520; radius: 260; color: "#0b685b22"; anchors.right: parent.right; anchors.top: parent.top; anchors.rightMargin: -170; anchors.topMargin: -250 }
 
     ColumnLayout {
@@ -18,8 +20,8 @@ Rectangle {
         spacing: 16
 
         Image { source: "qrc:/qt/qml/ThinPi/assets/thinpi.svg"; sourceSize.width: 72; sourceSize.height: 72; Layout.alignment: Qt.AlignHCenter }
-        Label { text: "ThinPi"; color: "#f5f9ff"; font.pixelSize: 38; font.weight: Font.DemiBold; Layout.alignment: Qt.AlignHCenter }
-        Label { text: loginRoot.selectedUsername ? "Welcome back" : "Who's signing in?"; color: "#93a9c1"; font.pixelSize: 17; Layout.alignment: Qt.AlignHCenter; Layout.bottomMargin: 10 }
+        Label { text: "ThinPi"; color: theme.text; font.pixelSize: 38; font.weight: Font.DemiBold; Layout.alignment: Qt.AlignHCenter }
+        Label { text: loginRoot.selectedUsername ? "Welcome back" : "Who's signing in?"; color: theme.muted; font.pixelSize: 17; Layout.alignment: Qt.AlignHCenter; Layout.bottomMargin: 10 }
 
         Flow {
             visible: !loginRoot.selectedUsername
@@ -34,6 +36,7 @@ Rectangle {
                     required property var modelData
                     width: 224
                     height: 108
+                    activeFocusOnTab: true
                     text: modelData.display_name
                     onClicked: {
                         loginRoot.selectedUsername = modelData.username
@@ -43,10 +46,10 @@ Rectangle {
                     }
                     contentItem: RowLayout {
                         spacing: 13
-                        Rectangle { width: 48; height: 48; radius: 15; color: "#173d4d"; Label { anchors.centerIn: parent; text: userCard.modelData.display_name.slice(0,1).toUpperCase(); color: "#68e4c7"; font.pixelSize: 22; font.bold: true } }
-                        ColumnLayout { Layout.fillWidth: true; spacing: 2; Label { Layout.fillWidth: true; text: userCard.modelData.display_name; color: "#f5f9ff"; font.pixelSize: 17; font.weight: Font.DemiBold; elide: Text.ElideRight } Label { Layout.fillWidth: true; text: "@" + userCard.modelData.username; color: "#8198b1"; font.pixelSize: 12; elide: Text.ElideRight } }
+                        Rectangle { width: 48; height: 48; radius: 15; color: theme.surface; clip: true; Image { id: profilePhoto; anchors.fill: parent; source: userCard.modelData.profile_photo_url || ""; fillMode: Image.PreserveAspectCrop; asynchronous: true } Label { anchors.centerIn: parent; visible: profilePhoto.status !== Image.Ready; text: userCard.modelData.display_name.slice(0,1).toUpperCase(); color: theme.accent; font.pixelSize: 22; font.bold: true } }
+                        ColumnLayout { Layout.fillWidth: true; spacing: 2; Label { Layout.fillWidth: true; text: userCard.modelData.display_name; color: theme.text; font.pixelSize: 17; font.weight: Font.DemiBold; elide: Text.ElideRight } Label { Layout.fillWidth: true; text: "@" + userCard.modelData.username; color: theme.muted; font.pixelSize: 12; elide: Text.ElideRight } }
                     }
-                    background: Rectangle { radius: 15; color: userCard.down ? "#19344d" : userCard.hovered ? "#172d43" : "#102135"; border.width: userCard.activeFocus ? 2 : 1; border.color: userCard.activeFocus ? "#5ed9bd" : "#29435f" }
+                    background: Rectangle { radius: 15; color: userCard.down ? theme.backgroundAlt : userCard.hovered ? theme.surfaceHover : theme.surface; border.width: userCard.activeFocus ? 3 : 1; border.color: userCard.activeFocus ? theme.accent : theme.border }
                 }
             }
 
@@ -55,9 +58,10 @@ Rectangle {
                 visible: backend.hasMoreUsers || backend.loginUsers.length === 0
                 width: 224
                 height: 108
+                activeFocusOnTab: true
                 onClicked: { loginRoot.selectedUsername = "other"; loginRoot.selectedDisplayName = "Other user"; loginRoot.manualUsername = true; manualUser.forceActiveFocus() }
-                contentItem: RowLayout { spacing: 13; Rectangle { width: 48; height: 48; radius: 15; color: "#183047"; Label { anchors.centerIn: parent; text: "…"; color: "#7fb3ff"; font.pixelSize: 24; font.bold: true } } ColumnLayout { Layout.fillWidth: true; Label { text: "Other user"; color: "#f5f9ff"; font.pixelSize: 17; font.weight: Font.DemiBold } Label { text: "Enter username"; color: "#8198b1"; font.pixelSize: 12 } } }
-                background: Rectangle { radius: 15; color: otherCard.down ? "#19344d" : otherCard.hovered ? "#172d43" : "#102135"; border.width: otherCard.activeFocus ? 2 : 1; border.color: otherCard.activeFocus ? "#5ed9bd" : "#29435f" }
+                contentItem: RowLayout { spacing: 13; Rectangle { width: 48; height: 48; radius: 15; color: theme.backgroundAlt; Label { anchors.centerIn: parent; text: "…"; color: theme.accent; font.pixelSize: 24; font.bold: true } } ColumnLayout { Layout.fillWidth: true; Label { text: "Other user"; color: theme.text; font.pixelSize: 17; font.weight: Font.DemiBold } Label { text: "Enter username"; color: theme.muted; font.pixelSize: 12 } } }
+                background: Rectangle { radius: 15; color: otherCard.down ? theme.backgroundAlt : otherCard.hovered ? theme.surfaceHover : theme.surface; border.width: otherCard.activeFocus ? 3 : 1; border.color: otherCard.activeFocus ? theme.accent : theme.border }
             }
         }
 
@@ -76,7 +80,8 @@ Rectangle {
             ThinTextField { id: manualUser; visible: loginRoot.manualUsername; Layout.fillWidth: true; placeholderText: "Username"; onAccepted: password.focusInput() }
             PasswordField { id: password; Layout.fillWidth: true; enabled: !backend.busy; placeholderText: "Password"; onAccepted: signInButton.clicked() }
             ThinButton { id: signInButton; text: backend.busy ? "Signing in…" : "Sign in"; variant: "primary"; Layout.fillWidth: true; enabled: !backend.busy; onClicked: backend.login(loginRoot.manualUsername ? manualUser.text : loginRoot.selectedUsername,password.text) }
-            BusyIndicator { running: backend.busy; visible: running; Layout.alignment: Qt.AlignHCenter; palette.dark: "#5ed9bd" }
+            BusyIndicator { running: backend.busy; visible: running; Layout.alignment: Qt.AlignHCenter; palette.dark: theme.accent }
         }
     }
+    Keys.onEscapePressed: { if (loginRoot.selectedUsername) { loginRoot.selectedUsername=""; loginRoot.selectedDisplayName=""; loginRoot.manualUsername=false } }
 }

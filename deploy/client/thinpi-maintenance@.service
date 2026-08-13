@@ -1,20 +1,15 @@
 [Unit]
 Description=ThinPi authorised local maintenance console for %i
-After=systemd-user-sessions.service
-Conflicts=getty@tty2.service
+After=systemd-user-sessions.service thinpi-ui.service
+Requires=thinpi-ui.service
 
 [Service]
 Type=oneshot
-TTYPath=/dev/tty2
-TTYReset=yes
-TTYVHangup=yes
-TTYVTDisallocate=yes
-StandardInput=tty-force
-StandardOutput=tty
-StandardError=tty
-ExecStartPre=/usr/bin/chvt 2
+User=%i
+SupplementaryGroups=thinpi
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/run/thinpi/maintenance.Xauthority
 ExecStart=/usr/local/libexec/thinpi-maintenance-session %i
-ExecStopPost=/usr/bin/chvt 7
 TimeoutStartSec=infinity
 
 [Install]

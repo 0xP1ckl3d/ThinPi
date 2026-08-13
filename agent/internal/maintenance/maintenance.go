@@ -27,9 +27,15 @@ func New(controller Controller, user string, log *slog.Logger) *Broker {
 	return &Broker{controller: controller, user: user, log: log}
 }
 
-func (b *Broker) Open(ticket string) error {
+func (b *Broker) Open(ticket, terminalTheme string) error {
 	if ticket == "" || !safeUser.MatchString(b.user) || b.user == "root" || b.user == "thinpi" {
 		return errors.New("local maintenance is not configured")
+	}
+	if terminalTheme == "" {
+		terminalTheme = "dark"
+	}
+	if terminalTheme != "dark" && terminalTheme != "light" {
+		return errors.New("invalid terminal theme")
 	}
 	b.mu.Lock()
 	if b.active {
@@ -45,7 +51,7 @@ func (b *Broker) Open(ticket string) error {
 		b.setInactive()
 		return errors.New("maintenance authorisation was rejected")
 	}
-	if err = b.start(b.user, func(err error) {
+	if err = b.start(b.user, terminalTheme, func(err error) {
 		b.setInactive()
 		if err != nil && b.log != nil {
 			b.log.Warn("maintenance console exited", "result", "failed")

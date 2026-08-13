@@ -6,9 +6,5 @@ xhost - >/dev/null 2>&1 || true
 xset s off
 xset s noblank
 xbindkeys -n -f /usr/local/libexec/thinpi-xbindkeysrc &
-if [ "${THINPI_SHOW_CURSOR:-no}" = yes ]; then
-  matchbox-window-manager -use_titlebar no &
-else
-  matchbox-window-manager -use_titlebar no -use_cursor no &
-fi
+matchbox-window-manager -use_titlebar no &
 exec /usr/bin/thinpi-launcher

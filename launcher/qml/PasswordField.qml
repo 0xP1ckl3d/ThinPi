@@ -3,6 +3,7 @@ import QtQuick.Controls
 
 Item {
     id: root
+    Theme { id: theme; paletteName: backend.clientTheme }
     property alias text: field.text
     property alias placeholderText: field.placeholderText
     signal accepted
@@ -33,6 +34,6 @@ Item {
         variant: "secondary"
         Accessible.name: checked ? "Hide password" : "Show password"
         background: Rectangle { color: "transparent"; radius: 8 }
-        contentItem: Label { text: reveal.text; color: reveal.checked ? "#5ed9bd" : "#8ca2ba"; font.pixelSize: 18; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
+        contentItem: Label { text: reveal.text; color: reveal.checked ? theme.accent : theme.muted; font.pixelSize: 18; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter }
     }
 }

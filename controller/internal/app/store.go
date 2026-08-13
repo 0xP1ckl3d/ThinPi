@@ -59,7 +59,7 @@ func (s *Store) CreateUser(ctx context.Context, username, displayName, password 
 }
 
 func (s *Store) LoginUsers(ctx context.Context) ([]LoginUser, bool, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT username,display_name FROM users WHERE enabled=1 ORDER BY CASE WHEN last_login_at IS NULL THEN 1 ELSE 0 END,last_login_at DESC,display_name COLLATE NOCASE LIMIT 7`)
+	rows, err := s.DB.QueryContext(ctx, `SELECT id,username,display_name,profile_photo IS NOT NULL,updated_at FROM users WHERE enabled=1 ORDER BY CASE WHEN last_login_at IS NULL THEN 1 ELSE 0 END,last_login_at DESC,display_name COLLATE NOCASE LIMIT 7`)
 	if err != nil {
 		return nil, false, err
 	}
@@ -72,7 +72,7 @@ func (s *Store) LoginUsers(ctx context.Context) ([]LoginUser, bool, error) {
 			break
 		}
 		var user LoginUser
-		if err := rows.Scan(&user.Username, &user.DisplayName); err != nil {
+		if err := rows.Scan(&user.ID, &user.Username, &user.DisplayName, &user.HasProfilePhoto, &user.ProfilePhotoVersion); err != nil {
 			return nil, false, err
 		}
 		users = append(users, user)
@@ -475,6 +475,9 @@ func (s *Store) RedeemLaunchTicket(ctx context.Context, token string, deviceID i
 		return LaunchManifest{}, ErrTicketInvalid
 	}
 	m.Config = json.RawMessage(configText)
+	if err = tx.QueryRowContext(ctx, `SELECT terminal_theme FROM kiosk_settings WHERE id=1`).Scan(&m.TerminalTheme); err != nil {
+		return LaunchManifest{}, err
+	}
 	exp, err := time.Parse(time.RFC3339Nano, expires)
 	if err != nil || !s.Now().Before(exp) {
 		return LaunchManifest{}, ErrTicketInvalid

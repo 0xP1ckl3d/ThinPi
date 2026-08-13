@@ -32,6 +32,9 @@ func TestFreeRDPPasswordOnlyInStdin(t *testing.T) {
 	if !strings.Contains(c.Stdin, "/cert:tofu") {
 		t.Fatal("RDP connection can still block on an interactive certificate prompt")
 	}
+	if !strings.Contains(c.Stdin, "+clipboard") {
+		t.Fatal("RDP was not attached to the signed-in kiosk clipboard")
+	}
 }
 
 func TestFreeRDPCertificateModes(t *testing.T) {
@@ -102,6 +105,9 @@ func TestVNCTLSPlainUsesEnvironmentCredentials(t *testing.T) {
 	if !slices.Contains(command.Env, "VNC_PASSWORD="+manifest.Password) {
 		t.Fatalf("VNC password not provided through TLSPlain environment setting: %#v", command)
 	}
+	if !strings.Contains(joined, "-AcceptClipboard=1") || !strings.Contains(joined, "-SendClipboard=1") {
+		t.Fatalf("VNC was not attached to the signed-in kiosk clipboard: %s", joined)
+	}
 }
 
 func TestVNCTLSPlainRejectsNULPassword(t *testing.T) {
@@ -121,7 +127,7 @@ func TestSSHUsesTrustedSinglePurposeTerminalWithoutLocalEscape(t *testing.T) {
 	if strings.Contains(joined, manifest.Password) || command.Stdin != "" {
 		t.Fatal("SSH password leaked into argv or stdin")
 	}
-	for _, required := range []string{"/usr/bin/xterm", "XTerm*fullscreen: always", "-e /usr/bin/sshpass -f {ssh_password_file} /usr/bin/ssh", "EscapeChar=none", "PermitLocalCommand=no", "ClearAllForwardings=yes", "StrictHostKeyChecking=yes", "UserKnownHostsFile=", "-l student server.example"} {
+	for _, required := range []string{"/usr/bin/xterm", "XTerm*fullscreen: always", "XTerm*selectToClipboard: true", "XTerm*background: #07111e", "-e /usr/bin/sshpass -f {ssh_password_file} /usr/bin/ssh", "EscapeChar=none", "PermitLocalCommand=no", "ClearAllForwardings=yes", "StrictHostKeyChecking=yes", "UserKnownHostsFile=", "-l student server.example"} {
 		if !strings.Contains(joined, required) {
 			t.Fatalf("missing hardening %q in %q", required, joined)
 		}
@@ -142,6 +148,18 @@ func TestSSHDoesNotRequireConfiguredHostKey(t *testing.T) {
 	base.Username = "student -oProxyCommand=sh"
 	if _, err := SSHCommand("xterm", "ssh", "sshpass", base); err == nil {
 		t.Fatal("SSH accepted an unsafe username")
+	}
+}
+
+func TestSSHTerminalTheme(t *testing.T) {
+	manifest := api.Manifest{Host: "server.example", Port: 22, Username: "student", Config: json.RawMessage(`{}`), TerminalTheme: "light"}
+	command, err := SSHCommand("xterm", "ssh", "sshpass", manifest)
+	if err != nil || !strings.Contains(strings.Join(command.Args, " "), "XTerm*background: #f4f6fa") {
+		t.Fatalf("light terminal theme not applied: %#v %v", command, err)
+	}
+	manifest.TerminalTheme = "neon"
+	if _, err = SSHCommand("xterm", "ssh", "sshpass", manifest); err == nil {
+		t.Fatal("invalid terminal theme accepted")
 	}
 }
 

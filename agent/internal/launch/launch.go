@@ -421,6 +421,9 @@ func FreeRDPCommand(binary string, x api.Manifest) (Command, error) {
 			return Command{}, err
 		}
 	}
+	// ThinPi intentionally maintains one text clipboard for the signed-in kiosk
+	// session, including across separate remote connections.
+	cfg.Clipboard = true
 	args := []string{"/v:" + net.JoinHostPort(x.Host, strconv.Itoa(x.Port))}
 	if x.Username != "" {
 		args = append(args, "/u:"+x.Username)
@@ -563,10 +566,18 @@ func SSHCommand(terminalBinary, sshBinary, sshpassBinary string, x api.Manifest)
 		files = append(files, FileInput{Placeholder: "{ssh_password_file}", Content: x.Password + "\n"})
 		sshArgs = append([]string{"-o", "PreferredAuthentications=password,keyboard-interactive", "-o", "PubkeyAuthentication=no", "-o", "NumberOfPasswordPrompts=1"}, sshArgs...)
 	}
+	foreground, background := "#e8edf4", "#07111e"
+	if x.TerminalTheme == "light" {
+		foreground, background = "#172033", "#f4f6fa"
+	} else if x.TerminalTheme != "" && x.TerminalTheme != "dark" {
+		return Command{}, errors.New("invalid terminal theme")
+	}
 	args := []string{"-title", title,
 		"-xrm", "XTerm*fullscreen: always", "-xrm", "XTerm*allowWindowOps: false",
 		"-xrm", "XTerm*allowTitleOps: false", "-xrm", "XTerm*allowFontOps: false",
-		"-xrm", "XTerm*allowMouseOps: false", "-xrm", "XTerm*logInhibit: true",
+		"-xrm", "XTerm*allowMouseOps: false", "-xrm", "XTerm*selectToClipboard: true",
+		"-xrm", "XTerm*foreground: " + foreground, "-xrm", "XTerm*background: " + background,
+		"-xrm", "XTerm*logInhibit: true",
 		"-xrm", "XTerm*scrollBar: false", "-xrm", "XTerm*toolBar: false", "-e"}
 	args = append(args, child...)
 	args = append(args, sshArgs...)
@@ -592,6 +603,7 @@ func VNCCommand(binary string, x api.Manifest) (Command, error) {
 			return Command{}, err
 		}
 	}
+	cfg.Clipboard = true
 	host := x.Host
 	if strings.Contains(host, ":") {
 		host = "[" + host + "]"

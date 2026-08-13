@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"database/sql"
 	"embed"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -61,6 +62,7 @@ func New(store *app.Store, logger *slog.Logger, dev bool, version string) *Serve
 	mux.HandleFunc("GET /healthz", s.health)
 	mux.HandleFunc("POST /api/v1/auth/login", s.login)
 	mux.HandleFunc("GET /api/v1/login-users", s.loginUsers)
+	mux.HandleFunc("GET /api/v1/profile-photos/{id}", s.profilePhoto)
 	mux.Handle("POST /api/v1/auth/logout", s.withSession(http.HandlerFunc(s.logout)))
 	mux.Handle("GET /api/v1/me", s.withSession(http.HandlerFunc(s.me)))
 	mux.Handle("PUT /api/v1/me", s.withSession(http.HandlerFunc(s.updateMe)))
@@ -267,13 +269,45 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, map[string]any{"token": token, "csrf_token": csrf, "user": u})
 }
 func (s *Server) loginUsers(w http.ResponseWriter, r *http.Request) {
-	users, hasMore, err := s.Store.LoginUsers(r.Context())
+	var screenSleepMinutes int
+	var showUserList bool
+	var terminalTheme, clientTheme string
+	err := s.Store.DB.QueryRowContext(r.Context(), `SELECT screen_sleep_minutes,show_user_list,terminal_theme,client_theme FROM kiosk_settings WHERE id=1`).Scan(&screenSleepMinutes, &showUserList, &terminalTheme, &clientTheme)
+	if err != nil {
+		s.error(w, r, 500, "INTERNAL_ERROR", "Unable to load kiosk settings.")
+		return
+	}
+	users := []app.LoginUser{}
+	hasMore := !showUserList
+	if showUserList {
+		users, hasMore, err = s.Store.LoginUsers(r.Context())
+		for i := range users {
+			if users[i].HasProfilePhoto {
+				version := strings.ReplaceAll(users[i].ProfilePhotoVersion, ":", "")
+				users[i].ProfilePhotoURL = "/api/v1/profile-photos/" + strconv.FormatInt(users[i].ID, 10) + "?v=" + version
+			}
+		}
+	}
 	if err != nil {
 		s.error(w, r, 500, "INTERNAL_ERROR", "Unable to load sign-in choices.")
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	writeJSON(w, 200, map[string]any{"items": users, "has_more": hasMore})
+	writeJSON(w, 200, map[string]any{"items": users, "has_more": hasMore, "configuration": map[string]any{"screen_sleep_minutes": screenSleepMinutes, "terminal_theme": terminalTheme, "client_theme": clientTheme}})
+}
+
+func (s *Server) profilePhoto(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	var photo []byte
+	var mime string
+	if err != nil || s.Store.DB.QueryRowContext(r.Context(), `SELECT profile_photo,profile_photo_mime FROM users WHERE id=? AND enabled=1 AND profile_photo IS NOT NULL`, id).Scan(&photo, &mime) != nil {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", mime)
+	w.Header().Set("Cache-Control", "private, max-age=300")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	_, _ = w.Write(photo)
 }
 func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 	sess := r.Context().Value(sessionKey).(app.Session)
@@ -507,7 +541,7 @@ func (s *Server) adminList(w http.ResponseWriter, r *http.Request) {
 		limit = n
 	}
 	queries := map[string]string{
-		"users":       `SELECT id,username,display_name,is_admin,enabled,last_login_at,created_at FROM users ORDER BY username`,
+		"users":       `SELECT id,username,display_name,is_admin,enabled,profile_photo IS NOT NULL AS has_profile_photo,last_login_at,updated_at,created_at FROM users ORDER BY username`,
 		"groups":      `SELECT id,name,description,created_at FROM groups ORDER BY name`,
 		"connections": `SELECT id,name,description,protocol,host,port,enabled,icon,sort_order,protocol_config_json,credential_id FROM connections ORDER BY sort_order,name`,
 		"credentials": `SELECT id,name,username,secret_type,created_at,updated_at FROM credentials ORDER BY name`,
@@ -515,6 +549,7 @@ func (s *Server) adminList(w http.ResponseWriter, r *http.Request) {
 		"policies":    `SELECT u.id AS user_id,u.username,u.display_name,COALESCE(p.timezone,'Australia/Sydney') AS timezone,COALESCE(p.allowed_days_mask,127) AS allowed_days_mask,COALESCE(p.access_start_minute,0) AS access_start_minute,COALESCE(p.access_end_minute,1440) AS access_end_minute,COALESCE(p.daily_limit_minutes,0) AS daily_limit_minutes,COALESCE(p.max_session_minutes,0) AS max_session_minutes,COALESCE(p.idle_logout_minutes,30) AS idle_logout_minutes FROM users u LEFT JOIN user_policies p ON p.user_id=u.id ORDER BY u.username`,
 		"permissions": `SELECT 'user' AS subject_type,u.id AS subject_id,u.display_name AS subject_name,c.id AS connection_id,c.name AS connection_name,p.can_launch,p.credential_id,cr.name AS credential_name FROM user_connection_permissions p JOIN users u ON u.id=p.user_id JOIN connections c ON c.id=p.connection_id LEFT JOIN credentials cr ON cr.id=p.credential_id UNION ALL SELECT 'group',g.id,g.name,c.id,c.name,p.can_launch,p.credential_id,cr.name FROM group_connection_permissions p JOIN groups g ON g.id=p.group_id JOIN connections c ON c.id=p.connection_id LEFT JOIN credentials cr ON cr.id=p.credential_id ORDER BY subject_type,subject_name,connection_name`,
 		"audit":       fmt.Sprintf(`SELECT id,timestamp,actor_user_id,device_id,event_type,connection_id,source_ip,result,metadata_json FROM audit_events ORDER BY timestamp DESC LIMIT %d`, limit),
+		"settings":    `SELECT id,screen_sleep_minutes,show_user_list,terminal_theme,client_theme,updated_at FROM kiosk_settings WHERE id=1`,
 	}
 	if resource == "dashboard" {
 		var users, devices, online, failures, launches int
@@ -554,7 +589,7 @@ func (s *Server) adminList(w http.ResponseWriter, r *http.Request) {
 			if b, ok := v.([]byte); ok {
 				v = string(b)
 			}
-			if c == "is_admin" || c == "enabled" || c == "can_launch" {
+			if c == "is_admin" || c == "enabled" || c == "can_launch" || c == "has_profile_photo" || c == "show_user_list" {
 				if n, ok := v.(int64); ok {
 					v = n != 0
 				}
@@ -797,6 +832,35 @@ func (s *Server) adminUpdate(w http.ResponseWriter, r *http.Request) {
 				_, _ = s.Store.DB.ExecContext(r.Context(), `DELETE FROM launch_tickets WHERE user_id=? AND redeemed_at IS NULL`, id)
 			}
 		}
+	case "settings":
+		var q struct {
+			ScreenSleepMinutes int    `json:"screen_sleep_minutes"`
+			ShowUserList       bool   `json:"show_user_list"`
+			TerminalTheme      string `json:"terminal_theme"`
+			ClientTheme        string `json:"client_theme"`
+		}
+		validClientThemes := map[string]bool{"ocean": true, "graphite": true, "forest": true, "sunset": true, "high-contrast": true}
+		if decode(r, &q) != nil || id != 1 || q.ScreenSleepMinutes < 0 || q.ScreenSleepMinutes > 1440 || (q.TerminalTheme != "dark" && q.TerminalTheme != "light") || !validClientThemes[q.ClientTheme] {
+			err = errors.New("invalid")
+		} else {
+			_, err = s.Store.DB.ExecContext(r.Context(), `UPDATE kiosk_settings SET screen_sleep_minutes=?,show_user_list=?,terminal_theme=?,client_theme=?,updated_at=? WHERE id=1`, q.ScreenSleepMinutes, q.ShowUserList, q.TerminalTheme, q.ClientTheme, now)
+		}
+	case "profile-photos":
+		var q struct {
+			DataURL string `json:"data_url"`
+		}
+		if decode(r, &q) != nil {
+			err = errors.New("invalid")
+		} else if q.DataURL == "" {
+			_, err = s.Store.DB.ExecContext(r.Context(), `UPDATE users SET profile_photo=NULL,profile_photo_mime=NULL,updated_at=? WHERE id=?`, now, id)
+		} else {
+			mime, photo, photoErr := decodeProfilePhoto(q.DataURL)
+			if photoErr != nil {
+				err = photoErr
+			} else {
+				_, err = s.Store.DB.ExecContext(r.Context(), `UPDATE users SET profile_photo=?,profile_photo_mime=?,updated_at=? WHERE id=?`, photo, mime, now, id)
+			}
+		}
 	default:
 		s.error(w, r, 404, "NOT_FOUND", "Resource not found.")
 		return
@@ -810,6 +874,22 @@ func (s *Server) adminUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	s.Store.AuditAdmin(r.Context(), sess.User.ID, remoteIP(r), resource, id)
 	w.WriteHeader(204)
+}
+
+func decodeProfilePhoto(dataURL string) (string, []byte, error) {
+	header, encoded, ok := strings.Cut(dataURL, ",")
+	if !ok || !strings.HasPrefix(header, "data:image/") || !strings.HasSuffix(header, ";base64") {
+		return "", nil, errors.New("invalid profile photo")
+	}
+	photo, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil || len(photo) == 0 || len(photo) > 256*1024 {
+		return "", nil, errors.New("invalid profile photo")
+	}
+	mime := http.DetectContentType(photo)
+	if mime != "image/png" && mime != "image/jpeg" && mime != "image/webp" {
+		return "", nil, errors.New("invalid profile photo")
+	}
+	return mime, photo, nil
 }
 func (s *Server) adminDelete(w http.ResponseWriter, r *http.Request) {
 	sess := r.Context().Value(sessionKey).(app.Session)

@@ -270,7 +270,6 @@ sudo sh /tmp/thinpi/deploy-client/provision.sh \
   --server https://thinpi.home.example:8443 \
   --device-id pi-living-room \
   --name 'Living room' \
-  --screen-sleep-minutes 15 \
   --ca-certificate /tmp/thinpi-ca.crt
 ```
 
@@ -282,7 +281,6 @@ sudo sh /tmp/thinpi/deploy-client/provision.sh \
   --server https://10.10.10.60:8443 \
   --device-id thinpi-pi-01 \
   --name "Dining Room Pi" \
-  --screen-sleep-minutes 15 \
   --ca-certificate /tmp/thinpi-ca.crt
 ```
 
@@ -425,9 +423,17 @@ Then test:
 | `sshpass_binary` | `auto` or explicit SSH password helper |
 | `maintenance_user` | Existing non-root Pi administrator opened by a valid maintenance ticket |
 
-`/etc/thinpi/ui.env` contains `THINPI_API_URL`, `THINPI_ADMIN_BROWSER`, and
-`THINPI_SCREEN_SLEEP_MINUTES`. The sleep value accepts `0` (disabled) through
-`1440`. After editing it, run `sudo systemctl restart thinpi-ui`.
+`/etc/thinpi/ui.env` contains `THINPI_API_URL` and `THINPI_ADMIN_BROWSER`.
+Display sleep and sign-in-screen privacy are controller-managed: open **Kiosk
+settings** in the controller administration application. Clients check for
+changes every minute, and `0` disables display sleep.
+
+The same page controls the client colour palette and dark/light SSH and local
+maintenance shells. Add profile photos from **People**. The client maintains a
+single text clipboard across supported remote clients, the administration
+browser and the mouse-selectable local maintenance shell; signing out clears
+it. Tab/Shift+Tab moves through kiosk controls and Enter or Space activates the
+focused control.
 
 Never add `mock_clients`, `THINPI_DEV_MODE`, a user token, a remote password,
 or the device token to the launcher environment.

@@ -11,8 +11,12 @@ type User struct {
 }
 
 type LoginUser struct {
-	Username    string `json:"username"`
-	DisplayName string `json:"display_name"`
+	ID                  int64  `json:"-"`
+	Username            string `json:"username"`
+	DisplayName         string `json:"display_name"`
+	HasProfilePhoto     bool   `json:"-"`
+	ProfilePhotoVersion string `json:"-"`
+	ProfilePhotoURL     string `json:"profile_photo_url,omitempty"`
 }
 
 type Connection struct {
@@ -54,6 +58,7 @@ type LaunchManifest struct {
 	CredentialType    string          `json:"credential_type,omitempty"`
 	Config            json.RawMessage `json:"config"`
 	MaxSessionSeconds int             `json:"max_session_seconds,omitempty"`
+	TerminalTheme     string          `json:"terminal_theme,omitempty"`
 }
 
 type AccessPolicy struct {

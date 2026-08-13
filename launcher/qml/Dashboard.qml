@@ -4,8 +4,10 @@ import QtQuick.Layouts
 
 Rectangle {
     id: dashboardRoot
-    color: "#07111e"
-    Rectangle { anchors.fill: parent; gradient: Gradient { GradientStop { position: 0; color: "#0b1b2d" } GradientStop { position: 0.5; color: "#07111e" } GradientStop { position: 1; color: "#06101a" } } }
+    Theme { id: theme; paletteName: backend.clientTheme }
+    color: theme.background
+    focus: true
+    Rectangle { anchors.fill: parent; gradient: Gradient { GradientStop { position: 0; color: theme.backgroundAlt } GradientStop { position: 0.5; color: theme.background } GradientStop { position: 1; color: Qt.darker(theme.background,1.08) } } }
 
     ColumnLayout {
         anchors.fill: parent
@@ -15,8 +17,8 @@ Rectangle {
         RowLayout {
             Layout.fillWidth: true
             spacing: 10
-            Rectangle { width: 48; height: 48; radius: 15; color: "#15384a"; Label { anchors.centerIn: parent; text: backend.displayName.slice(0,1).toUpperCase(); color: "#67e2c5"; font.pixelSize: 22; font.bold: true } }
-            ColumnLayout { spacing: 1; Label { text: "Welcome, " + backend.displayName; color: "#f6f9fe"; font.pixelSize: 29; font.weight: Font.DemiBold } Label { text: "Choose a remote system"; color: "#8fa5be"; font.pixelSize: 15 } }
+            Rectangle { width: 48; height: 48; radius: 15; color: theme.surface; clip: true; Image { id: dashboardPhoto; anchors.fill: parent; source: backend.profilePhotoUrl; fillMode: Image.PreserveAspectCrop; asynchronous: true } Label { anchors.centerIn: parent; visible: dashboardPhoto.status !== Image.Ready; text: backend.displayName.slice(0,1).toUpperCase(); color: theme.accent; font.pixelSize: 22; font.bold: true } }
+            ColumnLayout { spacing: 1; Label { text: "Welcome, " + backend.displayName; color: theme.text; font.pixelSize: 29; font.weight: Font.DemiBold } Label { text: "Choose a remote system"; color: theme.muted; font.pixelSize: 15 } }
             Item { Layout.fillWidth: true }
             ThinButton { visible: backend.isAdmin; text: "Administration"; variant: "primary"; onClicked: backend.openAdministration() }
             ThinButton { visible: backend.isAdmin && !backend.devMode; text: "Local maintenance"; onClicked: maintenanceConfirm.open() }
@@ -86,7 +88,7 @@ Rectangle {
         contentItem: ColumnLayout {
             spacing: 16
             Label { text: "Open local maintenance console?"; color: "#f4f8ff"; font.pixelSize: 24; font.weight: Font.DemiBold }
-            Label { Layout.fillWidth: true; text: "The ThinPi app will sign out and switch to this device's administrator console.\nType exit when maintenance is complete to return to the locked launcher."; color: "#c8d6e8"; wrapMode: Text.Wrap }
+            Label { Layout.fillWidth: true; text: "A full-screen shell will open as this device's administrator. Clipboard contents remain available until you sign out of ThinPi.\nType exit when maintenance is complete to return to the dashboard."; color: "#c8d6e8"; wrapMode: Text.Wrap }
             RowLayout { Layout.alignment: Qt.AlignRight; ThinButton { text: "Cancel"; onClicked: maintenanceConfirm.close() } ThinButton { text: "Open console"; variant: "primary"; onClicked: { maintenanceConfirm.close(); backend.openMaintenance() } } }
         }
     }

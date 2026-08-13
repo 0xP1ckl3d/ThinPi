@@ -30,6 +30,7 @@ type Manifest struct {
 	CredentialType    string          `json:"credential_type,omitempty"`
 	Config            json.RawMessage `json:"config"`
 	MaxSessionSeconds int             `json:"max_session_seconds,omitempty"`
+	TerminalTheme     string          `json:"terminal_theme,omitempty"`
 }
 type Client struct {
 	base  *url.URL

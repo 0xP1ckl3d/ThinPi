@@ -1,49 +1,613 @@
 #include "backend.h"
+#include <QClipboard>
+#include <QCoreApplication>
+#include <QDesktopServices>
+#include <QDir>
+#include <QEvent>
+#include <QGuiApplication>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QJsonArray>
+#include <QLocalSocket>
+#include <QLoggingCategory>
 #include <QNetworkReply>
 #include <QNetworkRequest>
-#include <QLocalSocket>
-#include <QProcessEnvironment>
 #include <QProcess>
+#include <QProcessEnvironment>
 #include <QStandardPaths>
-#include <QDesktopServices>
 #include <QUrl>
-#include <QLoggingCategory>
-#include <QDir>
 #include <QUuid>
-#include <QCoreApplication>
-#include <QEvent>
 #include <QtGlobal>
 
 Q_LOGGING_CATEGORY(uiLog, "thinpi.launcher")
 
-Backend::Backend(QObject *parent):QObject(parent){const auto env=QProcessEnvironment::systemEnvironment();m_devMode=env.value("THINPI_DEV_MODE")=="1";m_apiUrl=env.value("THINPI_API_URL",m_devMode?"http://127.0.0.1:8080":"https://thinpi.internal");m_agentSocket=env.value("THINPI_AGENT_SOCKET","/run/thinpi/agent.sock");m_deviceIdentifier=env.value("THINPI_DEVICE_ID",m_devMode?"dev-device":"");bool sleepMinutesValid=false;const auto configuredSleepMinutes=env.value("THINPI_SCREEN_SLEEP_MINUTES","15").toInt(&sleepMinutesValid);m_screenSleepMinutes=sleepMinutesValid?qBound(0,configuredSleepMinutes,1440):15;m_poll.setInterval(800);m_idle.setSingleShot(true);m_keepalive.setInterval(60000);connect(&m_poll,&QTimer::timeout,this,&Backend::pollAgent);connect(&m_idle,&QTimer::timeout,this,&Backend::logout);connect(&m_keepalive,&QTimer::timeout,this,&Backend::keepSessionAlive);QCoreApplication::instance()->installEventFilter(this);configureScreenSleep(false);loadLoginUsers();if(m_deviceIdentifier.isEmpty())agentRequest({{"action","status"}},[this](QJsonObject x){m_deviceIdentifier=x["device_identifier"].toString();});}
-bool Backend::eventFilter(QObject *watched,QEvent *event){if(!m_token.isEmpty()&&m_view=="dashboard"&&(event->type()==QEvent::KeyPress||event->type()==QEvent::MouseButtonPress||event->type()==QEvent::TouchBegin)){armIdleLock();if(!m_keepalive.isActive()){keepSessionAlive();m_keepalive.start();}}return QObject::eventFilter(watched,event);}
-void Backend::armIdleLock(){if(!m_token.isEmpty()&&m_view!="session"&&m_idleMinutes>0)m_idle.start(m_idleMinutes*60000);}
-void Backend::setSessionActive(bool active){configureScreenSleep(active);if(m_sessionActive==active)return;m_sessionActive=active;emit sessionActiveChanged();}
-void Backend::configureScreenSleep(bool sessionActive){if(m_devMode)return;if(sessionActive||m_screenSleepMinutes==0){QProcess::execute(QStringLiteral("xset"),{QStringLiteral("-dpms")});return;}const auto seconds=QString::number(m_screenSleepMinutes*60);QProcess::execute(QStringLiteral("xset"),{QStringLiteral("dpms"),QStringLiteral("0"),QStringLiteral("0"),seconds});QProcess::execute(QStringLiteral("xset"),{QStringLiteral("+dpms")});}
-void Backend::clearLocalSession(){m_token.clear();m_username.clear();m_displayName.clear();m_isAdmin=false;m_sessionExpired=false;m_connections.clear();m_restrictionMessage.clear();m_poll.stop();m_idle.stop();m_keepalive.stop();setSessionActive(false);emit restrictionMessageChanged();emit isAdminChanged();emit usernameChanged();emit displayNameChanged();setView("login");loadLoginUsers();}
-void Backend::setView(QString x){if(m_view==x)return;qCInfo(uiLog)<<"view transition"<<m_view<<"to"<<x;m_view=std::move(x);emit viewChanged();}
-void Backend::setBusy(bool x){if(m_busy==x)return;m_busy=x;emit busyChanged();}
-void Backend::fail(const QString &message,bool offline){m_error=message;emit errorMessageChanged();setBusy(false);m_keepalive.stop();setSessionActive(false);setView(offline?"offline":(m_token.isEmpty()?"login":"dashboard"));if(!m_token.isEmpty()&&!offline)armIdleLock();}
-void Backend::dismissError(){m_error.clear();emit errorMessageChanged();}
-void Backend::retry(){dismissError();if(m_token.isEmpty())setView("login");else loadConnections();}
-void Backend::loadLoginUsers(){QNetworkRequest request(QUrl(m_apiUrl+"/api/v1/login-users"));auto *reply=m_network.get(request);connect(reply,&QNetworkReply::finished,this,[this,reply](){const auto bytes=reply->readAll();const auto status=reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();reply->deleteLater();if(status<200||status>=300)return;const auto object=QJsonDocument::fromJson(bytes).object();const auto users=object["items"].toArray().toVariantList();const auto hasMore=object["has_more"].toBool();if(users==m_loginUsers&&hasMore==m_hasMoreUsers)return;m_loginUsers=users;m_hasMoreUsers=hasMore;emit loginUsersChanged();});}
-void Backend::keepSessionAlive(){if(m_token.isEmpty()||(m_view!="dashboard"&&m_view!="session")){m_keepalive.stop();return;}QNetworkRequest request(QUrl(m_apiUrl+"/api/v1/me"));request.setRawHeader("Authorization",QByteArray("Bearer ")+m_token.toUtf8());auto *reply=m_network.get(request);connect(reply,&QNetworkReply::finished,this,[this,reply](){const auto status=reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();reply->deleteLater();if(status==401)m_sessionExpired=true;});}
-void Backend::controllerRequest(const QByteArray &method,const QString &path,const QJsonObject &body,std::function<void(QJsonObject)> ok){QNetworkRequest request(QUrl(m_apiUrl+path));request.setHeader(QNetworkRequest::ContentTypeHeader,"application/json");if(!m_token.isEmpty())request.setRawHeader("Authorization",QByteArray("Bearer ")+m_token.toUtf8());QNetworkReply *reply=nullptr;const auto data=QJsonDocument(body).toJson(QJsonDocument::Compact);if(method=="GET")reply=m_network.get(request);else if(method=="POST")reply=m_network.post(request,data);else reply=m_network.sendCustomRequest(request,method,data);connect(reply,&QNetworkReply::finished,this,[this,reply,ok=std::move(ok)](){const auto bytes=reply->readAll();const auto status=reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();const auto err=reply->error();reply->deleteLater();QJsonParseError pe;const auto doc=QJsonDocument::fromJson(bytes,&pe);if(err!=QNetworkReply::NoError||status<200||status>=300){QString message="ThinPi Controller is unavailable. Check the network and try again.";bool offline=status==0;if(doc.isObject()){const auto safe=doc.object()["error"].toObject()["message"].toString();if(!safe.isEmpty()){message=safe;offline=false;}}if(status==401)clearLocalSession();fail(message,offline);return;}ok(doc.object());});}
-void Backend::login(const QString &username,const QString &password){if(username.trimmed().isEmpty()||password.isEmpty()){fail("Enter your username and password.");return;}dismissError();setBusy(true);controllerRequest("POST","/api/v1/auth/login",{{"username",username.trimmed()},{"password",password}},[this](QJsonObject x){m_token=x["token"].toString();const auto user=x["user"].toObject();m_username=user["username"].toString();m_displayName=user["display_name"].toString();m_isAdmin=user["is_admin"].toBool();emit usernameChanged();emit displayNameChanged();emit isAdminChanged();loadConnections();});}
-void Backend::loadConnections(){setBusy(true);controllerRequest("GET","/api/v1/connections",{},[this](QJsonObject x){m_connections.replace(x["items"].toArray());const auto policy=x["policy"].toObject();m_idleMinutes=qBound(1,policy["idle_logout_minutes"].toInt(30),1440);const auto message=policy["allowed"].toBool(true)?QString{}:policy["reason"].toString();if(message!=m_restrictionMessage){m_restrictionMessage=message;emit restrictionMessageChanged();}setBusy(false);setView("dashboard");armIdleLock();if(!m_keepalive.isActive()){keepSessionAlive();m_keepalive.start();}});}
-void Backend::refresh(){if(!m_token.isEmpty())loadConnections();}
-void Backend::logout(){if(!m_token.isEmpty()){QNetworkRequest request(QUrl(m_apiUrl+"/api/v1/auth/logout"));request.setHeader(QNetworkRequest::ContentTypeHeader,"application/json");request.setRawHeader("Authorization",QByteArray("Bearer ")+m_token.toUtf8());auto *reply=m_network.post(request,QByteArray("{}"));connect(reply,&QNetworkReply::finished,reply,&QObject::deleteLater);}clearLocalSession();setBusy(false);dismissError();}
-void Backend::lockKiosk(){agentRequest({{"action","cancel"}},[](QJsonObject){});closeAdministrationBrowser();logout();}
-void Backend::closeAdministrationBrowser(){if(!m_adminBrowser)return;m_adminBrowser->terminate();if(!m_adminBrowser->waitForFinished(1000))m_adminBrowser->kill();}
-void Backend::updateProfile(const QString &username,const QString &displayName,const QString &currentPassword,const QString &newPassword){if(username.trimmed().isEmpty()||displayName.trimmed().isEmpty()||currentPassword.isEmpty()){fail("Enter your username, display name and current password.");return;}dismissError();setBusy(true);controllerRequest("PUT","/api/v1/me",{{"username",username.trimmed()},{"display_name",displayName.trimmed()},{"current_password",currentPassword},{"new_password",newPassword}},[this](QJsonObject x){const auto user=x["user"].toObject();m_username=user["username"].toString();m_displayName=user["display_name"].toString();emit usernameChanged();emit displayNameChanged();setBusy(false);armIdleLock();emit profileUpdated();});}
-void Backend::openAdministration(){if(!m_isAdmin||m_token.isEmpty())return;dismissError();setBusy(true);controllerRequest("POST","/api/v1/admin-handoff",{},[this](QJsonObject x){const QUrl url=QUrl(m_apiUrl).resolved(QUrl(x["path"].toString()));bool opened=false;if(m_devMode){opened=QDesktopServices::openUrl(url);}else if(!m_adminBrowser){const auto configured=QProcessEnvironment::systemEnvironment().value("THINPI_ADMIN_BROWSER");QString browser=configured;if(browser.isEmpty()){for(const auto &candidate: {QStringLiteral("chromium"),QStringLiteral("google-chrome-stable"),QStringLiteral("chromium-browser")}){browser=QStandardPaths::findExecutable(candidate);if(!browser.isEmpty())break;}}if(!browser.isEmpty()){const auto cacheRoot=QStandardPaths::writableLocation(QStandardPaths::CacheLocation);m_adminProfile=cacheRoot+QStringLiteral("/admin-")+QUuid::createUuid().toString(QUuid::WithoutBraces);QDir().mkpath(m_adminProfile);m_adminBrowser=new QProcess(this);m_adminBrowser->setProgram(browser);m_adminBrowser->setArguments({QStringLiteral("--new-window"),QStringLiteral("--start-maximized"),QStringLiteral("--user-data-dir=")+m_adminProfile,QStringLiteral("--no-first-run"),QStringLiteral("--no-default-browser-check"),QStringLiteral("--noerrdialogs"),QStringLiteral("--disable-session-crashed-bubble"),QStringLiteral("--disable-background-networking"),QStringLiteral("--disable-component-update"),QStringLiteral("--disable-sync"),QStringLiteral("--disable-translate"),QStringLiteral("--disable-pinch"),QStringLiteral("--disable-extensions"),QStringLiteral("--disable-plugins"),QStringLiteral("--disable-pdf-extension"),QStringLiteral("--disable-features=KeyboardLockAPI"),QStringLiteral("--password-store=basic"),QStringLiteral("--overscroll-history-navigation=0"),url.toString()});connect(m_adminBrowser,qOverload<int,QProcess::ExitStatus>(&QProcess::finished),this,[this](){QDir(m_adminProfile).removeRecursively();m_adminProfile.clear();m_adminBrowser->deleteLater();m_adminBrowser=nullptr;});m_adminBrowser->start();opened=m_adminBrowser->waitForStarted(3000);if(!opened){QDir(m_adminProfile).removeRecursively();m_adminProfile.clear();m_adminBrowser->deleteLater();m_adminBrowser=nullptr;}}}setBusy(false);if(!opened)fail("The administration browser is unavailable on this ThinPi.");});}
-void Backend::openMaintenance(){if(!m_isAdmin||m_token.isEmpty()||m_deviceIdentifier.isEmpty())return;dismissError();setBusy(true);controllerRequest("POST","/api/v1/maintenance",{{"device_identifier",m_deviceIdentifier}},[this](QJsonObject x){agentRequest({{"action","maintenance"},{"ticket",x["ticket"].toString()}},[this](QJsonObject response){setBusy(false);if(!response["accepted"].toBool()){fail("Local maintenance could not be authorised.");return;}logout();});});}
-void Backend::launch(int row){const auto id=m_connections.idAt(row);if(id==0)return;m_activeConnectionID=id;if(!m_restrictionMessage.isEmpty()){fail(m_restrictionMessage);return;}if(m_deviceIdentifier.isEmpty()){fail("The local ThinPi service is unavailable.");return;}m_seenActive=false;m_sessionExpired=false;m_idle.stop();configureScreenSleep(true);m_activeName=m_connections.nameAt(row);m_activeProtocol=m_connections.protocolAt(row).toUpper();m_sessionMessage="Connecting to "+m_activeName+QStringLiteral("…");emit sessionMessageChanged();setBusy(true);setView("session");controllerRequest("POST",QString("/api/v1/connections/%1/launch").arg(id),{{"device_identifier",m_deviceIdentifier}},[this](QJsonObject x){agentRequest({{"action","launch"},{"ticket",x["ticket"].toString()}},[this](QJsonObject response){if(!response["accepted"].toBool()){fail("The local ThinPi service could not start the session.");return;}setBusy(false);m_poll.start();pollAgent();});});}
-void Backend::agentRequest(const QJsonObject &request,std::function<void(QJsonObject)> complete){auto *socket=new QLocalSocket(this);auto *timeout=new QTimer(socket);timeout->setSingleShot(true);timeout->setInterval(3000);connect(timeout,&QTimer::timeout,socket,[this,socket](){socket->abort();socket->deleteLater();if(m_view=="session")fail("The local ThinPi service is unavailable.");});connect(socket,&QLocalSocket::connected,socket,[socket,request](){socket->write(QJsonDocument(request).toJson(QJsonDocument::Compact)+"\n");socket->flush();});connect(socket,&QLocalSocket::readyRead,socket,[socket,timeout,complete=std::move(complete),buffer=QByteArray{}]()mutable{buffer+=socket->readAll();if(!buffer.contains('\n'))return;const auto doc=QJsonDocument::fromJson(buffer);if(!doc.isObject())return;timeout->stop();complete(doc.object());socket->disconnectFromServer();socket->deleteLater();});socket->connectToServer(m_agentSocket,QIODevice::ReadWrite);timeout->start();}
-void Backend::pollAgent(){agentRequest({{"action","status"}},[this](QJsonObject response){const auto status=response["status"].toObject();const auto state=status["state"].toString();if(state!="idle")m_seenActive=true;if(state=="active"){m_sessionMessage=m_activeName+" — "+m_activeProtocol;emit sessionMessageChanged();setSessionActive(true);if(!m_keepalive.isActive()){keepSessionAlive();m_keepalive.start();}}if(state=="error"){m_poll.stop();m_keepalive.stop();setSessionActive(false);const auto confirmation=status["confirmation"].toObject();m_sshHostKeyConfirmation=confirmation["kind"].toString()=="ssh_host_key_changed";emit sshHostKeyConfirmationChanged();const auto detail=status["last_error"].toString();fail(detail.isEmpty()?"Unable to connect to "+m_activeName+".":detail);}else if(state=="idle"&&m_seenActive){m_poll.stop();m_keepalive.stop();setSessionActive(false);m_sessionMessage.clear();emit sessionMessageChanged();if(m_sessionExpired){clearLocalSession();}else{setView("dashboard");armIdleLock();}}});}
-void Backend::endSession(){agentRequest({{"action","cancel"}},[](QJsonObject){});}
-void Backend::resolveSSHHostKey(bool accept){agentRequest({{"action","resolve_ssh_host_key"},{"accept",accept}},[this,accept](QJsonObject response){if(!response["accepted"].toBool()){fail("The SSH host-key confirmation is no longer available.");return;}m_sshHostKeyConfirmation=false;emit sshHostKeyConfirmationChanged();dismissError();setBusy(false);setView("dashboard");armIdleLock();if(accept)launch(m_connections.indexOfId(m_activeConnectionID));});}
+Backend::Backend(QObject *parent) : QObject(parent) {
+  const auto env = QProcessEnvironment::systemEnvironment();
+  m_devMode = env.value("THINPI_DEV_MODE") == "1";
+  m_apiUrl = env.value("THINPI_API_URL", m_devMode ? "http://127.0.0.1:8080"
+                                                   : "https://thinpi.internal");
+  m_agentSocket = env.value("THINPI_AGENT_SOCKET", "/run/thinpi/agent.sock");
+  m_deviceIdentifier =
+      env.value("THINPI_DEVICE_ID", m_devMode ? "dev-device" : "");
+  m_poll.setInterval(800);
+  m_idle.setSingleShot(true);
+  m_keepalive.setInterval(60000);
+  m_configurationPoll.setInterval(60000);
+  connect(&m_poll, &QTimer::timeout, this, &Backend::pollAgent);
+  connect(&m_idle, &QTimer::timeout, this, &Backend::logout);
+  connect(&m_keepalive, &QTimer::timeout, this, &Backend::keepSessionAlive);
+  connect(&m_configurationPoll, &QTimer::timeout, this,
+          &Backend::loadLoginUsers);
+  connect(QGuiApplication::clipboard(), &QClipboard::dataChanged, this,
+          &Backend::retainClipboard);
+  m_configurationPoll.start();
+  QCoreApplication::instance()->installEventFilter(this);
+  configureScreenSleep(false);
+  loadLoginUsers();
+  if (m_deviceIdentifier.isEmpty())
+    agentRequest({{"action", "status"}}, [this](QJsonObject x) {
+      m_deviceIdentifier = x["device_identifier"].toString();
+    });
+}
+bool Backend::eventFilter(QObject *watched, QEvent *event) {
+  if (!m_token.isEmpty() && m_view == "dashboard" &&
+      (event->type() == QEvent::KeyPress ||
+       event->type() == QEvent::MouseButtonPress ||
+       event->type() == QEvent::TouchBegin ||
+       event->type() == QEvent::ApplicationActivate ||
+       event->type() == QEvent::WindowActivate)) {
+    armIdleLock();
+    if (!m_keepalive.isActive()) {
+      keepSessionAlive();
+      m_keepalive.start();
+    }
+  }
+  return QObject::eventFilter(watched, event);
+}
+void Backend::armIdleLock() {
+  if (!m_token.isEmpty() && m_view != "session" && m_idleMinutes > 0)
+    m_idle.start(m_idleMinutes * 60000);
+}
+void Backend::setSessionActive(bool active) {
+  configureScreenSleep(active);
+  if (m_sessionActive == active)
+    return;
+  m_sessionActive = active;
+  emit sessionActiveChanged();
+}
+void Backend::configureScreenSleep(bool sessionActive) {
+  if (m_devMode)
+    return;
+  if (sessionActive || m_screenSleepMinutes == 0) {
+    QProcess::execute(QStringLiteral("xset"), {QStringLiteral("-dpms")});
+    return;
+  }
+  const auto seconds = QString::number(m_screenSleepMinutes * 60);
+  QProcess::execute(QStringLiteral("xset"),
+                    {QStringLiteral("dpms"), QStringLiteral("0"),
+                     QStringLiteral("0"), seconds});
+  QProcess::execute(QStringLiteral("xset"), {QStringLiteral("+dpms")});
+}
+void Backend::clearLocalSession() {
+  m_token.clear();
+  m_username.clear();
+  m_displayName.clear();
+  m_profilePhotoUrl.clear();
+  m_isAdmin = false;
+  m_sessionExpired = false;
+  m_connections.clear();
+  m_restrictionMessage.clear();
+  m_poll.stop();
+  m_idle.stop();
+  m_keepalive.stop();
+  clearClipboard();
+  setSessionActive(false);
+  emit restrictionMessageChanged();
+  emit isAdminChanged();
+  emit usernameChanged();
+  emit displayNameChanged();
+  emit profilePhotoUrlChanged();
+  setView("login");
+  loadLoginUsers();
+}
+void Backend::setView(QString x) {
+  if (m_view == x)
+    return;
+  qCInfo(uiLog) << "view transition" << m_view << "to" << x;
+  m_view = std::move(x);
+  emit viewChanged();
+}
+void Backend::setBusy(bool x) {
+  if (m_busy == x)
+    return;
+  m_busy = x;
+  emit busyChanged();
+}
+void Backend::fail(const QString &message, bool offline) {
+  m_error = message;
+  emit errorMessageChanged();
+  setBusy(false);
+  m_keepalive.stop();
+  setSessionActive(false);
+  setView(offline ? "offline" : (m_token.isEmpty() ? "login" : "dashboard"));
+  if (!m_token.isEmpty() && !offline)
+    armIdleLock();
+}
+void Backend::dismissError() {
+  m_error.clear();
+  emit errorMessageChanged();
+}
+void Backend::retry() {
+  dismissError();
+  if (m_token.isEmpty())
+    setView("login");
+  else
+    loadConnections();
+}
+void Backend::loadLoginUsers() {
+  QNetworkRequest request(QUrl(m_apiUrl + "/api/v1/login-users"));
+  auto *reply = m_network.get(request);
+  connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+    const auto bytes = reply->readAll();
+    const auto status =
+        reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    reply->deleteLater();
+    if (status < 200 || status >= 300)
+      return;
+    const auto object = QJsonDocument::fromJson(bytes).object();
+    const auto configuration = object["configuration"].toObject();
+    const auto configuredSleepMinutes =
+        qBound(0, configuration["screen_sleep_minutes"].toInt(15), 1440);
+    if (configuredSleepMinutes != m_screenSleepMinutes) {
+      m_screenSleepMinutes = configuredSleepMinutes;
+      configureScreenSleep(m_sessionActive);
+    }
+    const auto clientTheme = configuration["client_theme"].toString("ocean");
+    if (clientTheme != m_clientTheme) {
+      m_clientTheme = clientTheme;
+      emit clientThemeChanged();
+    }
+    const auto terminalTheme = configuration["terminal_theme"].toString("dark");
+    if (terminalTheme != m_terminalTheme) {
+      m_terminalTheme = terminalTheme;
+      emit terminalThemeChanged();
+    }
+    auto userItems = object["items"].toArray();
+    for (qsizetype i = 0; i < userItems.size(); ++i) {
+      auto user = userItems[i].toObject();
+      const auto photoPath = user["profile_photo_url"].toString();
+      if (!photoPath.isEmpty())
+        user["profile_photo_url"] =
+            QUrl(m_apiUrl).resolved(QUrl(photoPath)).toString();
+      userItems[i] = user;
+    }
+    const auto users = userItems.toVariantList();
+    const auto hasMore = object["has_more"].toBool();
+    if (users == m_loginUsers && hasMore == m_hasMoreUsers)
+      return;
+    m_loginUsers = users;
+    m_hasMoreUsers = hasMore;
+    emit loginUsersChanged();
+  });
+}
+void Backend::keepSessionAlive() {
+  if (m_token.isEmpty() || (m_view != "dashboard" && m_view != "session")) {
+    m_keepalive.stop();
+    return;
+  }
+  QNetworkRequest request(QUrl(m_apiUrl + "/api/v1/me"));
+  request.setRawHeader("Authorization",
+                       QByteArray("Bearer ") + m_token.toUtf8());
+  auto *reply = m_network.get(request);
+  connect(reply, &QNetworkReply::finished, this, [this, reply]() {
+    const auto status =
+        reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    reply->deleteLater();
+    if (status == 401)
+      m_sessionExpired = true;
+  });
+}
+void Backend::controllerRequest(const QByteArray &method, const QString &path,
+                                const QJsonObject &body,
+                                std::function<void(QJsonObject)> ok) {
+  QNetworkRequest request(QUrl(m_apiUrl + path));
+  request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+  if (!m_token.isEmpty())
+    request.setRawHeader("Authorization",
+                         QByteArray("Bearer ") + m_token.toUtf8());
+  QNetworkReply *reply = nullptr;
+  const auto data = QJsonDocument(body).toJson(QJsonDocument::Compact);
+  if (method == "GET")
+    reply = m_network.get(request);
+  else if (method == "POST")
+    reply = m_network.post(request, data);
+  else
+    reply = m_network.sendCustomRequest(request, method, data);
+  connect(
+      reply, &QNetworkReply::finished, this,
+      [this, reply, ok = std::move(ok)]() {
+        const auto bytes = reply->readAll();
+        const auto status =
+            reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        const auto err = reply->error();
+        reply->deleteLater();
+        QJsonParseError pe;
+        const auto doc = QJsonDocument::fromJson(bytes, &pe);
+        if (err != QNetworkReply::NoError || status < 200 || status >= 300) {
+          QString message = "ThinPi Controller is unavailable. Check the "
+                            "network and try again.";
+          bool offline = status == 0;
+          if (doc.isObject()) {
+            const auto safe =
+                doc.object()["error"].toObject()["message"].toString();
+            if (!safe.isEmpty()) {
+              message = safe;
+              offline = false;
+            }
+          }
+          if (status == 401)
+            clearLocalSession();
+          fail(message, offline);
+          return;
+        }
+        ok(doc.object());
+      });
+}
+void Backend::login(const QString &username, const QString &password) {
+  if (username.trimmed().isEmpty() || password.isEmpty()) {
+    fail("Enter your username and password.");
+    return;
+  }
+  dismissError();
+  setBusy(true);
+  controllerRequest("POST", "/api/v1/auth/login",
+                    {{"username", username.trimmed()}, {"password", password}},
+                    [this](QJsonObject x) {
+                      m_token = x["token"].toString();
+                      const auto user = x["user"].toObject();
+                      m_username = user["username"].toString();
+                      m_displayName = user["display_name"].toString();
+                      m_profilePhotoUrl =
+                          QUrl(m_apiUrl)
+                              .resolved(
+                                  QUrl("/api/v1/profile-photos/" +
+                                       QString::number(user["id"].toInteger())))
+                              .toString();
+                      m_isAdmin = user["is_admin"].toBool();
+                      emit usernameChanged();
+                      emit displayNameChanged();
+                      emit profilePhotoUrlChanged();
+                      emit isAdminChanged();
+                      loadConnections();
+                    });
+}
+void Backend::loadConnections() {
+  setBusy(true);
+  controllerRequest("GET", "/api/v1/connections", {}, [this](QJsonObject x) {
+    m_connections.replace(x["items"].toArray());
+    const auto policy = x["policy"].toObject();
+    m_idleMinutes = qBound(1, policy["idle_logout_minutes"].toInt(30), 1440);
+    const auto message = policy["allowed"].toBool(true)
+                             ? QString{}
+                             : policy["reason"].toString();
+    if (message != m_restrictionMessage) {
+      m_restrictionMessage = message;
+      emit restrictionMessageChanged();
+    }
+    setBusy(false);
+    setView("dashboard");
+    armIdleLock();
+    if (!m_keepalive.isActive()) {
+      keepSessionAlive();
+      m_keepalive.start();
+    }
+  });
+}
+void Backend::refresh() {
+  if (!m_token.isEmpty())
+    loadConnections();
+}
+void Backend::logout() {
+  if (!m_token.isEmpty()) {
+    QNetworkRequest request(QUrl(m_apiUrl + "/api/v1/auth/logout"));
+    request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
+    request.setRawHeader("Authorization",
+                         QByteArray("Bearer ") + m_token.toUtf8());
+    auto *reply = m_network.post(request, QByteArray("{}"));
+    connect(reply, &QNetworkReply::finished, reply, &QObject::deleteLater);
+  }
+  clearLocalSession();
+  setBusy(false);
+  dismissError();
+}
+void Backend::lockKiosk() {
+  agentRequest({{"action", "cancel"}}, [](QJsonObject) {});
+  closeAdministrationBrowser();
+  logout();
+}
+void Backend::closeAdministrationBrowser() {
+  if (!m_adminBrowser)
+    return;
+  m_adminBrowser->terminate();
+  if (!m_adminBrowser->waitForFinished(1000))
+    m_adminBrowser->kill();
+}
+void Backend::updateProfile(const QString &username, const QString &displayName,
+                            const QString &currentPassword,
+                            const QString &newPassword) {
+  if (username.trimmed().isEmpty() || displayName.trimmed().isEmpty() ||
+      currentPassword.isEmpty()) {
+    fail("Enter your username, display name and current password.");
+    return;
+  }
+  dismissError();
+  setBusy(true);
+  controllerRequest("PUT", "/api/v1/me",
+                    {{"username", username.trimmed()},
+                     {"display_name", displayName.trimmed()},
+                     {"current_password", currentPassword},
+                     {"new_password", newPassword}},
+                    [this](QJsonObject x) {
+                      const auto user = x["user"].toObject();
+                      m_username = user["username"].toString();
+                      m_displayName = user["display_name"].toString();
+                      emit usernameChanged();
+                      emit displayNameChanged();
+                      setBusy(false);
+                      armIdleLock();
+                      emit profileUpdated();
+                    });
+}
+void Backend::openAdministration() {
+  if (!m_isAdmin || m_token.isEmpty())
+    return;
+  dismissError();
+  m_idle.stop();
+  setBusy(true);
+  controllerRequest("POST", "/api/v1/admin-handoff", {}, [this](QJsonObject x) {
+    const QUrl url = QUrl(m_apiUrl).resolved(QUrl(x["path"].toString()));
+    bool opened = false;
+    if (m_devMode) {
+      opened = QDesktopServices::openUrl(url);
+    } else if (!m_adminBrowser) {
+      const auto configured = QProcessEnvironment::systemEnvironment().value(
+          "THINPI_ADMIN_BROWSER");
+      QString browser = configured;
+      if (browser.isEmpty()) {
+        for (const auto &candidate : {QStringLiteral("chromium"),
+                                      QStringLiteral("google-chrome-stable"),
+                                      QStringLiteral("chromium-browser")}) {
+          browser = QStandardPaths::findExecutable(candidate);
+          if (!browser.isEmpty())
+            break;
+        }
+      }
+      if (!browser.isEmpty()) {
+        const auto cacheRoot =
+            QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
+        m_adminProfile = cacheRoot + QStringLiteral("/admin-") +
+                         QUuid::createUuid().toString(QUuid::WithoutBraces);
+        QDir().mkpath(m_adminProfile);
+        m_adminBrowser = new QProcess(this);
+        m_adminBrowser->setProgram(browser);
+        m_adminBrowser->setArguments(
+            {QStringLiteral("--new-window"),
+             QStringLiteral("--start-maximized"),
+             QStringLiteral("--user-data-dir=") + m_adminProfile,
+             QStringLiteral("--no-first-run"),
+             QStringLiteral("--no-default-browser-check"),
+             QStringLiteral("--noerrdialogs"),
+             QStringLiteral("--disable-session-crashed-bubble"),
+             QStringLiteral("--disable-background-networking"),
+             QStringLiteral("--disable-component-update"),
+             QStringLiteral("--disable-sync"),
+             QStringLiteral("--disable-translate"),
+             QStringLiteral("--disable-pinch"),
+             QStringLiteral("--disable-extensions"),
+             QStringLiteral("--disable-plugins"),
+             QStringLiteral("--disable-pdf-extension"),
+             QStringLiteral("--disable-features=KeyboardLockAPI"),
+             QStringLiteral("--password-store=basic"),
+             QStringLiteral("--overscroll-history-navigation=0"),
+             url.toString()});
+        connect(m_adminBrowser,
+                qOverload<int, QProcess::ExitStatus>(&QProcess::finished), this,
+                [this]() {
+                  QDir(m_adminProfile).removeRecursively();
+                  m_adminProfile.clear();
+                  m_adminBrowser->deleteLater();
+                  m_adminBrowser = nullptr;
+                  loadLoginUsers();
+                  armIdleLock();
+                });
+        m_adminBrowser->start();
+        opened = m_adminBrowser->waitForStarted(3000);
+        if (!opened) {
+          QDir(m_adminProfile).removeRecursively();
+          m_adminProfile.clear();
+          m_adminBrowser->deleteLater();
+          m_adminBrowser = nullptr;
+        }
+      }
+    }
+    setBusy(false);
+    if (!opened)
+      fail("The administration browser is unavailable on this ThinPi.");
+  });
+}
+void Backend::openMaintenance() {
+  if (!m_isAdmin || m_token.isEmpty() || m_deviceIdentifier.isEmpty())
+    return;
+  dismissError();
+  m_idle.stop();
+  setBusy(true);
+  controllerRequest(
+      "POST", "/api/v1/maintenance",
+      {{"device_identifier", m_deviceIdentifier}}, [this](QJsonObject x) {
+        agentRequest({{"action", "maintenance"},
+                      {"ticket", x["ticket"].toString()},
+                      {"terminal_theme", m_terminalTheme}},
+                     [this](QJsonObject response) {
+                       setBusy(false);
+                       if (!response["accepted"].toBool())
+                         fail("Local maintenance could not be authorised.");
+                     });
+      });
+}
+void Backend::retainClipboard() {
+  if (m_token.isEmpty() || m_updatingClipboard)
+    return;
+  auto *clipboard = QGuiApplication::clipboard();
+  const auto text = clipboard->text(QClipboard::Clipboard);
+  if (text.isNull())
+    return;
+  m_retainedClipboard = text;
+  m_updatingClipboard = true;
+  clipboard->setText(m_retainedClipboard, QClipboard::Clipboard);
+  if (clipboard->supportsSelection())
+    clipboard->setText(m_retainedClipboard, QClipboard::Selection);
+  m_updatingClipboard = false;
+}
+void Backend::clearClipboard() {
+  m_retainedClipboard.clear();
+  m_updatingClipboard = true;
+  auto *clipboard = QGuiApplication::clipboard();
+  clipboard->clear(QClipboard::Clipboard);
+  if (clipboard->supportsSelection())
+    clipboard->clear(QClipboard::Selection);
+  m_updatingClipboard = false;
+}
+void Backend::launch(int row) {
+  const auto id = m_connections.idAt(row);
+  if (id == 0)
+    return;
+  m_activeConnectionID = id;
+  if (!m_restrictionMessage.isEmpty()) {
+    fail(m_restrictionMessage);
+    return;
+  }
+  if (m_deviceIdentifier.isEmpty()) {
+    fail("The local ThinPi service is unavailable.");
+    return;
+  }
+  m_seenActive = false;
+  m_sessionExpired = false;
+  m_idle.stop();
+  configureScreenSleep(true);
+  m_activeName = m_connections.nameAt(row);
+  m_activeProtocol = m_connections.protocolAt(row).toUpper();
+  m_sessionMessage = "Connecting to " + m_activeName + QStringLiteral("…");
+  emit sessionMessageChanged();
+  setBusy(true);
+  setView("session");
+  controllerRequest(
+      "POST", QString("/api/v1/connections/%1/launch").arg(id),
+      {{"device_identifier", m_deviceIdentifier}}, [this](QJsonObject x) {
+        agentRequest(
+            {{"action", "launch"}, {"ticket", x["ticket"].toString()}},
+            [this](QJsonObject response) {
+              if (!response["accepted"].toBool()) {
+                fail("The local ThinPi service could not start the session.");
+                return;
+              }
+              setBusy(false);
+              m_poll.start();
+              pollAgent();
+            });
+      });
+}
+void Backend::agentRequest(const QJsonObject &request,
+                           std::function<void(QJsonObject)> complete) {
+  auto *socket = new QLocalSocket(this);
+  auto *timeout = new QTimer(socket);
+  timeout->setSingleShot(true);
+  timeout->setInterval(3000);
+  connect(timeout, &QTimer::timeout, socket, [this, socket]() {
+    socket->abort();
+    socket->deleteLater();
+    if (m_view == "session")
+      fail("The local ThinPi service is unavailable.");
+  });
+  connect(socket, &QLocalSocket::connected, socket, [socket, request]() {
+    socket->write(QJsonDocument(request).toJson(QJsonDocument::Compact) + "\n");
+    socket->flush();
+  });
+  connect(socket, &QLocalSocket::readyRead, socket,
+          [socket, timeout, complete = std::move(complete),
+           buffer = QByteArray{}]() mutable {
+            buffer += socket->readAll();
+            if (!buffer.contains('\n'))
+              return;
+            const auto doc = QJsonDocument::fromJson(buffer);
+            if (!doc.isObject())
+              return;
+            timeout->stop();
+            complete(doc.object());
+            socket->disconnectFromServer();
+            socket->deleteLater();
+          });
+  socket->connectToServer(m_agentSocket, QIODevice::ReadWrite);
+  timeout->start();
+}
+void Backend::pollAgent() {
+  agentRequest({{"action", "status"}}, [this](QJsonObject response) {
+    const auto status = response["status"].toObject();
+    const auto state = status["state"].toString();
+    if (state != "idle")
+      m_seenActive = true;
+    if (state == "active") {
+      m_sessionMessage = m_activeName + " — " + m_activeProtocol;
+      emit sessionMessageChanged();
+      setSessionActive(true);
+      if (!m_keepalive.isActive()) {
+        keepSessionAlive();
+        m_keepalive.start();
+      }
+    }
+    if (state == "error") {
+      m_poll.stop();
+      m_keepalive.stop();
+      setSessionActive(false);
+      const auto confirmation = status["confirmation"].toObject();
+      m_sshHostKeyConfirmation =
+          confirmation["kind"].toString() == "ssh_host_key_changed";
+      emit sshHostKeyConfirmationChanged();
+      const auto detail = status["last_error"].toString();
+      fail(detail.isEmpty() ? "Unable to connect to " + m_activeName + "."
+                            : detail);
+    } else if (state == "idle" && m_seenActive) {
+      m_poll.stop();
+      m_keepalive.stop();
+      setSessionActive(false);
+      m_sessionMessage.clear();
+      emit sessionMessageChanged();
+      if (m_sessionExpired) {
+        clearLocalSession();
+      } else {
+        setView("dashboard");
+        armIdleLock();
+      }
+    }
+  });
+}
+void Backend::endSession() {
+  agentRequest({{"action", "cancel"}}, [](QJsonObject) {});
+}
+void Backend::resolveSSHHostKey(bool accept) {
+  agentRequest({{"action", "resolve_ssh_host_key"}, {"accept", accept}},
+               [this, accept](QJsonObject response) {
+                 if (!response["accepted"].toBool()) {
+                   fail(
+                       "The SSH host-key confirmation is no longer available.");
+                   return;
+                 }
+                 m_sshHostKeyConfirmation = false;
+                 emit sshHostKeyConfirmationChanged();
+                 dismissError();
+                 setBusy(false);
+                 setView("dashboard");
+                 armIdleLock();
+                 if (accept)
+                   launch(m_connections.indexOfId(m_activeConnectionID));
+               });
+}

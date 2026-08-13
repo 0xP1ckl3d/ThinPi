@@ -38,7 +38,8 @@ grep -F 'certutil -A' "$ROOT/deploy/client/browser-policy.sh" >/dev/null
 grep -F 'CA_IMPORT_FILE=$(mktemp)' "$ROOT/deploy/client/browser-policy.sh" >/dev/null
 grep -F "CONTROLLER_URL=\$(sudo sed" "$ROOT/deploy/client/stage.sh" >/dev/null
 grep -F 'xhost +SI:localuser:thinpi' "$ROOT/deploy/client/xinitrc" >/dev/null
-grep -F 'TTYPath=/dev/tty2' "$ROOT/deploy/client/thinpi-maintenance@.service" >/dev/null
+grep -F 'Requires=thinpi-ui.service' "$ROOT/deploy/client/thinpi-maintenance@.service" >/dev/null
+grep -F 'XTerm*selectToClipboard: true' "$ROOT/deploy/client/maintenance-session.sh" >/dev/null
 grep -F 'pipewire-audio pipewire-alsa pipewire-pulse' "$ROOT/deploy/client/provision.sh" >/dev/null
 grep -F 'bash /tmp/moonlight-repo.sh' "$ROOT/deploy/client/provision.sh" >/dev/null
 grep -F 'install_moonlight_appimage_amd64' "$ROOT/deploy/client/provision.sh" >/dev/null
@@ -66,12 +67,11 @@ grep -F '/usr/bin/xinit /usr/local/libexec/thinpi-xinitrc -- :0' "$ROOT/deploy/c
 grep -F 'ExecStartPre=/usr/local/libexec/thinpi-detect-display' "$ROOT/deploy/client/thinpi-ui-pi.service" >/dev/null
 grep -F 'ExecStart=/usr/sbin/runuser -u thinpi -- /usr/bin/xinit' "$ROOT/deploy/client/thinpi-ui-pi.service" >/dev/null
 grep -F 'ExecStartPost=/usr/bin/chvt 7' "$ROOT/deploy/client/thinpi-ui-pi.service" >/dev/null
-grep -F 'Environment=THINPI_SHOW_CURSOR=yes' "$ROOT/deploy/client/thinpi-ui-pi.service" >/dev/null
-grep -F 'THINPI_SHOW_CURSOR' "$ROOT/deploy/client/xinitrc" >/dev/null
 grep -F 'xbindkeys -n -f /usr/local/libexec/thinpi-xbindkeysrc' "$ROOT/deploy/client/xinitrc" >/dev/null
 grep -F 'Mod4 + l' "$ROOT/deploy/client/thinpi-xbindkeysrc" >/dev/null
-grep -F 'THINPI_SCREEN_SLEEP_MINUTES' "$ROOT/deploy/client/provision.sh" >/dev/null
+grep -F 'screen_sleep_minutes' "$ROOT/launcher/src/backend.cpp" >/dev/null
 grep -F 'matchbox-window-manager -use_titlebar no &' "$ROOT/deploy/client/xinitrc" >/dev/null
+! grep -F -- '-use_cursor no' "$ROOT/deploy/client/xinitrc" >/dev/null
 ! grep -F 'NoNewPrivileges=' "$ROOT/deploy/client/thinpi-ui-pi.service" >/dev/null
 ! grep -F 'PAMName=' "$ROOT/deploy/client/thinpi-ui-pi.service" >/dev/null
 grep -F '[ -x /usr/lib/xorg/Xorg.wrap ]' "$ROOT/deploy/client/provision.sh" >/dev/null

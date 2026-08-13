@@ -103,6 +103,77 @@ func TestAdminAndUserRoleEnforced(t *testing.T) {
 	}
 }
 
+func TestAdminKioskSettingsReachLoginBootstrap(t *testing.T) {
+	server, _ := testHTTP(t)
+	client := server.Client()
+
+	status, bootstrap := request(t, client, "GET", server.URL+"/api/v1/login-users", "", nil)
+	if status != http.StatusOK {
+		t.Fatalf("bootstrap status=%d %#v", status, bootstrap)
+	}
+	configuration := bootstrap["configuration"].(map[string]any)
+	if configuration["screen_sleep_minutes"] != float64(15) {
+		t.Fatalf("default screen sleep=%v", configuration["screen_sleep_minutes"])
+	}
+
+	_, login := request(t, client, "POST", server.URL+"/api/v1/auth/login", "", map[string]string{"username": "admin", "password": "thinpi-dev"})
+	adminToken := login["token"].(string)
+	status, output := request(t, client, "PUT", server.URL+"/api/v1/admin/settings/1", adminToken, map[string]any{"screen_sleep_minutes": 7, "show_user_list": false, "terminal_theme": "light", "client_theme": "forest"})
+	if status != http.StatusNoContent {
+		t.Fatalf("settings update status=%d %#v", status, output)
+	}
+
+	status, bootstrap = request(t, client, "GET", server.URL+"/api/v1/login-users", "", nil)
+	configuration = bootstrap["configuration"].(map[string]any)
+	if status != http.StatusOK || configuration["screen_sleep_minutes"] != float64(7) || configuration["terminal_theme"] != "light" || configuration["client_theme"] != "forest" {
+		t.Fatalf("updated bootstrap status=%d %#v", status, bootstrap)
+	}
+	if items := bootstrap["items"].([]any); len(items) != 0 || bootstrap["has_more"] != true {
+		t.Fatalf("hidden user list was exposed: %#v", bootstrap)
+	}
+
+	status, _ = request(t, client, "PUT", server.URL+"/api/v1/admin/settings/1", adminToken, map[string]any{"screen_sleep_minutes": 1441, "show_user_list": true, "terminal_theme": "dark", "client_theme": "ocean"})
+	if status != http.StatusBadRequest {
+		t.Fatalf("invalid screen sleep accepted: %d", status)
+	}
+}
+
+func TestAdminProfilePhotoAppearsOnKioskLogin(t *testing.T) {
+	server, _ := testHTTP(t)
+	client := server.Client()
+	_, login := request(t, client, "POST", server.URL+"/api/v1/auth/login", "", map[string]string{"username": "admin", "password": "thinpi-dev"})
+	adminToken := login["token"].(string)
+	adminID := int64(login["user"].(map[string]any)["id"].(float64))
+	photo := "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9Zl9sAAAAASUVORK5CYII="
+	status, output := request(t, client, "PUT", server.URL+"/api/v1/admin/profile-photos/"+strconv.FormatInt(adminID, 10), adminToken, map[string]string{"data_url": photo})
+	if status != http.StatusNoContent {
+		t.Fatalf("photo upload status=%d %#v", status, output)
+	}
+
+	status, bootstrap := request(t, client, "GET", server.URL+"/api/v1/login-users", "", nil)
+	if status != http.StatusOK {
+		t.Fatal(status)
+	}
+	photoURL := ""
+	for _, item := range bootstrap["items"].([]any) {
+		user := item.(map[string]any)
+		if user["username"] == "admin" {
+			photoURL, _ = user["profile_photo_url"].(string)
+		}
+	}
+	if photoURL == "" {
+		t.Fatalf("profile photo URL absent: %#v", bootstrap)
+	}
+	response, err := client.Get(server.URL + photoURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK || response.Header.Get("Content-Type") != "image/png" {
+		t.Fatalf("photo response=%d %q", response.StatusCode, response.Header.Get("Content-Type"))
+	}
+}
+
 func TestSSHIsAProductionProtocolAndMockIsNot(t *testing.T) {
 	s := &Server{Dev: false}
 	if !s.validProtocol("ssh") {

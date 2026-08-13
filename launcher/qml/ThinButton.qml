@@ -3,8 +3,10 @@ import QtQuick.Controls
 
 Button {
     id: control
+    Theme { id: theme; paletteName: backend.clientTheme }
+    activeFocusOnTab: true
     property string variant: "secondary"
-    property color accentColor: variant === "primary" ? "#06131b" : variant === "danger" ? "#ffb5bf" : "#e8f1fb"
+    property color accentColor: variant === "primary" ? theme.accentText : variant === "danger" ? "#ffb5bf" : theme.text
     implicitHeight: 44
     implicitWidth: Math.max(96, contentItem.implicitWidth + 34)
     leftPadding: 17
@@ -20,13 +22,13 @@ Button {
     }
     background: Rectangle {
         radius: 10
-        border.width: 1
-        border.color: control.variant === "primary" ? "#65dfc2" : control.variant === "danger" ? "#7a3547" : "#31506f"
+        border.width: control.activeFocus ? 3 : 1
+        border.color: control.activeFocus ? theme.accent : control.variant === "primary" ? theme.accent : control.variant === "danger" ? "#7a3547" : theme.border
         color: {
-            if (!control.enabled) return "#111d2b"
-            if (control.variant === "primary") return control.down ? "#4ec3a9" : control.hovered ? "#71e8ce" : "#5ed9bd"
+            if (!control.enabled) return theme.backgroundAlt
+            if (control.variant === "primary") return control.down ? theme.surfaceHover : control.hovered ? Qt.lighter(theme.accent,1.12) : theme.accent
             if (control.variant === "danger") return control.down ? "#351923" : control.hovered ? "#321923" : "#281720"
-            return control.down ? "#16283d" : control.hovered ? "#203b57" : "#172b42"
+            return control.down ? theme.backgroundAlt : control.hovered ? theme.surfaceHover : theme.surface
         }
         Behavior on color { ColorAnimation { duration: 120 } }
     }

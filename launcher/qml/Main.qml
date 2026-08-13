@@ -5,9 +5,10 @@ import ThinPi
 
 ApplicationWindow {
     id: root; visible: true; visibility: backend.devMode ? Window.Windowed : Window.FullScreen
-    width: 1100; height: 700; title: "ThinPi"; color: "#07111e"
+    width: 1100; height: 700; title: "ThinPi"; color: appTheme.background
     font.family: "sans-serif"
-    Loader { anchors.fill: parent; sourceComponent: backend.view === "login" ? login : backend.view === "dashboard" ? dashboard : backend.view === "session" ? session : offline }
+    Theme { id: appTheme; paletteName: backend.clientTheme }
+    Loader { anchors.fill: parent; sourceComponent: backend.view === "login" ? login : backend.view === "dashboard" ? dashboard : backend.view === "session" ? session : offline; onLoaded: { if (item) item.forceActiveFocus() } }
     Component { id: login; Login {} }
     Component { id: dashboard; Dashboard {} }
     Component { id: session; SessionOverlay {} }

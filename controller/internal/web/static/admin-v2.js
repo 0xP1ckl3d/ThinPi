@@ -1,7 +1,7 @@
 const csrf = document.querySelector('meta[name=csrf]')?.content || '';
 const $ = selector => document.querySelector(selector);
 const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
-const state = {dashboard:{},users:[],groups:[],connections:[],credentials:[],devices:[],policies:[],permissions:[],audit:[]};
+const state = {dashboard:{},settings:{id:1,screen_sleep_minutes:15,show_user_list:true,terminal_theme:'dark',client_theme:'ocean'},users:[],groups:[],connections:[],credentials:[],devices:[],policies:[],permissions:[],audit:[]};
 let toastTimer;
 let lastActivity = Date.now();
 for (const eventName of ['pointerdown','keydown','touchstart','scroll']) {
@@ -73,7 +73,8 @@ function renderDashboard() {
 function renderPeople() {
   $('#users-body').innerHTML = state.users.map(user => {
     const policy = policyFor(user.id);
-    return `<tr><td><div class="person"><span class="avatar">${esc(user.display_name.slice(0,1).toUpperCase())}</span><div><strong>${esc(user.display_name)}</strong><small>@${esc(user.username)}</small></div></div></td><td>${user.is_admin ? badge('Administrator','blue') : badge('Member')}</td><td><small>${esc(policySummary(policy))}</small></td><td>${user.enabled ? badge('Active','green') : badge('Disabled','red')}</td><td><div class="actions"><button class="small-button" data-action="assign-user" data-id="${user.id}">Assign connections</button><button class="small-button" data-action="policy" data-id="${user.id}">Restrictions</button><button class="small-button" data-action="edit-user" data-id="${user.id}">Edit</button><button class="small-button ${user.enabled ? 'danger-button' : ''}" data-action="toggle-user" data-id="${user.id}">${user.enabled ? 'Disable' : 'Enable'}</button></div></td></tr>`;
+    const avatar=user.has_profile_photo?`<img src="/api/v1/profile-photos/${user.id}?v=${encodeURIComponent(user.updated_at||'')}" alt="">`:esc(user.display_name.slice(0,1).toUpperCase());
+    return `<tr><td><div class="person"><span class="avatar">${avatar}</span><div><strong>${esc(user.display_name)}</strong><small>@${esc(user.username)}</small></div></div></td><td>${user.is_admin ? badge('Administrator','blue') : badge('Member')}</td><td><small>${esc(policySummary(policy))}</small></td><td>${user.enabled ? badge('Active','green') : badge('Disabled','red')}</td><td><div class="actions"><button class="small-button" data-action="assign-user" data-id="${user.id}">Assign connections</button><button class="small-button" data-action="policy" data-id="${user.id}">Restrictions</button><button class="small-button" data-action="upload-photo" data-id="${user.id}">${user.has_profile_photo?'Replace photo':'Add photo'}</button>${user.has_profile_photo?`<button class="small-button" data-action="remove-photo" data-id="${user.id}">Remove photo</button>`:''}<button class="small-button" data-action="edit-user" data-id="${user.id}">Edit</button><button class="small-button ${user.enabled ? 'danger-button' : ''}" data-action="toggle-user" data-id="${user.id}">${user.enabled ? 'Disable' : 'Enable'}</button></div></td></tr>`;
   }).join('');
   $('#groups-list').innerHTML = state.groups.map(group => `<article class="list-card"><div class="list-card-main"><span class="list-icon">◎</span><div><h3>${esc(group.name)}</h3><p>${esc(group.description || 'No description')}</p></div></div><div class="actions"><button class="small-button" data-action="assign-group" data-id="${group.id}">Assign connections</button><button class="small-button" data-action="edit-group" data-id="${group.id}">Edit</button><button class="small-button danger-button" data-action="delete" data-path="/groups/${group.id}">Delete</button></div></article>`).join('');
 }
@@ -89,6 +90,14 @@ function renderAccess() {
 
 function renderDevices() {
   $('#devices-list').innerHTML = state.devices.map(device => `<article class="list-card"><div class="list-card-main"><span class="list-icon">▰</span><div><h3>${esc(device.name)}</h3><p>${esc(device.device_identifier)} · Last seen ${esc(device.last_seen_at || 'never')}</p></div></div><div class="actions">${device.enabled ? badge('Enrolled','green') : badge('Revoked','red')}<button class="small-button" data-action="rename-device" data-id="${device.id}">Rename</button><button class="small-button ${device.enabled ? 'danger-button' : ''}" data-action="toggle-device" data-id="${device.id}">${device.enabled ? 'Revoke' : 'Restore'}</button></div></article>`).join('');
+}
+
+function renderSettings() {
+  const form = $('#kiosk-settings-form');
+  form.elements.screen_sleep_minutes.value = state.settings.screen_sleep_minutes;
+  form.elements.show_user_list.checked = !!state.settings.show_user_list;
+  form.elements.terminal_theme.value = state.settings.terminal_theme;
+  form.elements.client_theme.value = state.settings.client_theme;
 }
 
 function renderCredentials() {
@@ -122,10 +131,10 @@ function fillSelectors() {
 
 async function refresh() {
   try {
-    const paths = ['/dashboard','/users','/groups','/connections','/credentials','/devices','/policies','/permissions','/audit?limit=100'];
-    const [dashboard,users,groups,connections,credentials,devices,policies,permissions,audit] = await Promise.all(paths.map(path => api(path)));
-    Object.assign(state,{dashboard,users:users.items,groups:groups.items,connections:connections.items,credentials:credentials.items,devices:devices.items,policies:policies.items,permissions:permissions.items,audit:audit.items});
-    renderDashboard(); renderPeople(); renderConnections(); renderAccess(); renderDevices(); renderCredentials(); renderAudit();
+    const paths = ['/dashboard','/settings','/users','/groups','/connections','/credentials','/devices','/policies','/permissions','/audit?limit=100'];
+    const [dashboard,settings,users,groups,connections,credentials,devices,policies,permissions,audit] = await Promise.all(paths.map(path => api(path)));
+    Object.assign(state,{dashboard,settings:settings.items[0],users:users.items,groups:groups.items,connections:connections.items,credentials:credentials.items,devices:devices.items,policies:policies.items,permissions:permissions.items,audit:audit.items});
+    renderDashboard(); renderPeople(); renderConnections(); renderAccess(); renderDevices(); renderSettings(); renderCredentials(); renderAudit();
   } catch (error) { note(error.message, true); }
 }
 
@@ -149,12 +158,13 @@ $('#credential-form').onsubmit = event => { event.preventDefault(); const data=f
 $('#permission-form').onsubmit = event => { event.preventDefault(); submit(event.target,'/permissions',{subject_id:Number,connection_id:Number,credential_id:v=>v?Number(v):null,can_launch:v=>v==='on'}); };
 $('#membership-form').onsubmit = event => { event.preventDefault(); submit(event.target,'/memberships',{user_id:Number,group_id:Number,member:v=>v==='on'}); };
 $('#token-form').onsubmit = async event => { event.preventDefault(); try { const data=formData(event.target,{ttl_minutes:Number}); const result=await api('/enrolment-tokens',{method:'POST',body:JSON.stringify(data)}); $('#new-token').textContent=result.token; note('Enrolment token created'); } catch(error){note(error.message,true);} };
+$('#kiosk-settings-form').onsubmit = event => { event.preventDefault(); const form=event.target; update('/settings/1',{screen_sleep_minutes:Number(form.elements.screen_sleep_minutes.value),show_user_list:form.elements.show_user_list.checked,terminal_theme:form.elements.terminal_theme.value,client_theme:form.elements.client_theme.value},'Kiosk settings saved'); };
 $('#connection-form').onsubmit = event => { event.preventDefault(); const data=formData(event.target,{port:Number,sort_order:Number,enabled:v=>v==='on',credential_id:v=>v?Number(v):null,protocol_config:v=>JSON.parse(v||'{}')}); if(data.protocol==='ssh')data.protocol_config={terminal_title:data.ssh_terminal_title.trim()||'Secure shell'};else if(data.protocol==='rdp')data.protocol_config={...data.protocol_config,certificate_mode:data.rdp_certificate_mode}; delete data.ssh_terminal_title;delete data.rdp_certificate_mode; submitData(event.target,'/connections',data); };
 $('#perm-subject-type').onchange = fillSelectors;
 
 const protocolDefaults = {
-  rdp:{port:3389,config:{fullscreen:true,dynamic_resolution:true,audio:true,clipboard:false,certificate_mode:'tofu'}},
-  vnc:{port:5900,config:{fullscreen:true,shared:true,view_only:false,clipboard:false}},
+  rdp:{port:3389,config:{fullscreen:true,dynamic_resolution:true,audio:true,clipboard:true,certificate_mode:'tofu'}},
+  vnc:{port:5900,config:{fullscreen:true,shared:true,view_only:false,clipboard:true}},
   ssh:{port:22,config:{terminal_title:'Secure shell'}},
   moonlight:{port:47984,config:{application:'Desktop',width:1920,height:1080,fps:60,bitrate_kbps:20000,audio:true,gamepad:true,sunshine_api_port:47990,pairing_name:'ThinPi'}},
   mock:{port:1,config:{}}
@@ -201,6 +211,14 @@ function ask(title, fields = [], confirmLabel = 'Save changes', message = '') {
 async function update(path, body, message='Updated') { try { await api(path,{method:'PUT',body:JSON.stringify(body)}); await refresh(); note(message); } catch(error){note(error.message,true);} }
 async function removeItem(path) { const answer=await ask('Delete item',[],'Delete','This cannot be undone.'); if(answer===null)return; try{await api(path,{method:'DELETE'});await refresh();note('Deleted');}catch(error){note(error.message,true);} }
 
+async function prepareProfilePhoto(file) {
+  if (!['image/png','image/jpeg','image/webp'].includes(file.type) || file.size > 10*1024*1024) throw new Error('Choose a PNG, JPEG or WebP image smaller than 10 MB');
+  const source=await createImageBitmap(file), edge=320, scale=Math.min(1,edge/source.width,edge/source.height), canvas=document.createElement('canvas');
+  canvas.width=Math.max(1,Math.round(source.width*scale)); canvas.height=Math.max(1,Math.round(source.height*scale));
+  canvas.getContext('2d').drawImage(source,0,0,canvas.width,canvas.height); source.close();
+  return canvas.toDataURL('image/jpeg',0.82);
+}
+
 function credentialOptions(selected,protocol) { return [{label:'No stored credential',value:''},...credentialsForProtocol(protocol).map(item=>({label:`${item.name} · ${item.username||'no username'}`,value:String(item.id)}))].map(option=>({...option,value:option.value,label:option.label})); }
 
 async function handleAction(button) {
@@ -214,6 +232,8 @@ async function handleAction(button) {
   if(action==='toggle-user') return update('/users/'+id,{display_name:user.display_name,is_admin:user.is_admin,enabled:!user.enabled,password:''},user.enabled?'Account disabled':'Account enabled');
   if(action==='edit-user') { const data=await ask('Edit person',[{name:'display_name',label:'Display name',value:user.display_name,required:true},{name:'password',label:'New password (leave blank to keep current)',type:'password',minLength:8},{name:'is_admin',label:'Administrator',type:'checkbox',value:user.is_admin},{name:'enabled',label:'Active account',type:'checkbox',value:user.enabled}]); if(data)return update('/users/'+id,data); }
   if(action==='policy') return openPolicy(id);
+  if(action==='upload-photo') { const input=document.createElement('input');input.type='file';input.accept='image/png,image/jpeg,image/webp';input.onchange=async()=>{const file=input.files?.[0];if(!file)return;try{const dataURL=await prepareProfilePhoto(file);await update('/profile-photos/'+id,{data_url:dataURL},'Profile photo saved')}catch(error){note(error.message,true)}};input.click();return; }
+  if(action==='remove-photo') return update('/profile-photos/'+id,{data_url:''},'Profile photo removed');
   if(action==='edit-group') { const data=await ask('Edit group',[{name:'name',label:'Group name',value:group.name,required:true},{name:'description',label:'Description',value:group.description||'',multiline:true}]); if(data)return update('/groups/'+id,data); }
   if(action==='toggle-connection') return update('/connections/'+id,connectionPayload(connection,{enabled:!connection.enabled}),connection.enabled?'Connection disabled':'Connection enabled');
   if(action==='edit-connection') {
@@ -261,6 +281,7 @@ $('#return-client').onclick=async event=>{
 };
 
 document.querySelectorAll('input[type=password]').forEach(addPasswordToggle);
+$('#connection-form [name=protocol_config]').value=JSON.stringify(protocolDefaults.rdp.config,null,2);
 syncConnectionFields();
 syncCredentialFields();
 refresh();

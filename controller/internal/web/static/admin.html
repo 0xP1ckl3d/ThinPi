@@ -7,6 +7,7 @@
   <title>ThinPi Console</title>
   <link rel="stylesheet" href="/static/admin-v2.css">
   <link rel="stylesheet" href="/static/admin-password.css">
+  <link rel="stylesheet" href="/static/admin-profile.css">
 </head>
 <body>
   <header class="topbar">
@@ -22,6 +23,7 @@
         <button class="nav-item" data-tab="connections"><span>▣</span>Connections</button>
         <button class="nav-item" data-tab="access"><span>◆</span>Access rules</button>
         <button class="nav-item" data-tab="devices"><span>▰</span>Devices</button>
+        <button class="nav-item" data-tab="settings"><span>⚙</span>Kiosk settings</button>
         <button class="nav-item" data-tab="credentials"><span>●</span>Credentials</button>
         <button class="nav-item" data-tab="activity"><span>≡</span>Activity</button>
       </nav>
@@ -47,7 +49,7 @@
       </section>
 
       <section id="connections" class="view">
-        <div class="page-heading"><div><p class="eyebrow">Remote systems</p><h1>Connections</h1><p>RDP, Linux VNC, locked SSH and Moonlight sessions.</p></div></div>
+        <div class="page-heading"><div><p class="eyebrow">Remote systems</p><h1>Connections</h1><p>RDP, Linux VNC, locked SSH and Moonlight sessions. The signed-in text clipboard is always enabled where the protocol supports it.</p></div></div>
         <article class="panel"><div class="panel-heading"><div><h2>Add connection</h2><p>Credentials are delivered only to the device agent. SSH server keys are trusted on first use. For Moonlight, assign a password credential containing the Sunshine Web UI administrator login; ThinPi pairs automatically on first launch.</p></div></div><form id="connection-form" class="form-grid connection-form"><label>Name<input name="name" required></label><label>Type<select name="protocol" id="connection-protocol"><option value="rdp">Windows / Linux RDP</option><option value="vnc">Linux desktop (VNC)</option><option value="ssh">Linux command line (locked SSH)</option><option value="moonlight">Moonlight / Sunshine</option>{{if .Dev}}<option value="mock">Demo session</option>{{end}}</select></label><label>Host or IP<input name="host" required></label><label>Port<input name="port" type="number" min="1" max="65535" value="3389" required></label><label>Description<input name="description"></label><label>Default credential<select name="credential_id" id="connection-credential"><option value="">No stored credential</option></select></label><label class="check"><input name="enabled" type="checkbox" checked> Available</label><label>Order<input name="sort_order" type="number" value="0"></label><label id="rdp-certificate-field">RDP server certificate<select name="rdp_certificate_mode"><option value="tofu">Trust on first connection, then pin</option><option value="deny">Require an already trusted certificate</option><option value="ignore">Ignore certificate validation (unsafe)</option></select><small>TOFU accepts the first certificate and rejects later changes.</small></label><label id="ssh-title-field" hidden>Terminal title<input name="ssh_terminal_title" value="Secure shell"></label><label class="wide" id="protocol-config-field">Advanced protocol settings<textarea name="protocol_config">{"fullscreen":true,"dynamic_resolution":true,"audio":true,"clipboard":false,"certificate_mode":"tofu"}</textarea></label><input name="icon" type="hidden" value=""><button class="primary">Create connection</button></form></article>
         <div id="connections-list" class="connection-grid"></div>
       </section>
@@ -63,6 +65,11 @@
         <div class="page-heading"><div><p class="eyebrow">Thin client appliances</p><h1>Devices</h1><p>Enrol, monitor or revoke a VM, mini PC, generic Linux device, or Raspberry Pi.</p></div></div>
         <article class="panel"><form id="token-form" class="inline-form"><label>Device name<input name="name" required></label><label>Token lifetime<select name="ttl_minutes"><option value="15">15 minutes</option><option value="60">1 hour</option><option value="1440">24 hours</option></select></label><button class="primary">Create enrolment token</button></form><code id="new-token" class="token-output"></code></article>
         <div id="devices-list" class="card-list"></div>
+      </section>
+
+      <section id="settings" class="view">
+        <div class="page-heading"><div><p class="eyebrow">Thin client behaviour</p><h1>Kiosk settings</h1><p>Controller-managed settings shared by Lubuntu and Raspberry Pi clients.</p></div></div>
+        <article class="panel"><div class="panel-heading"><div><h2>Display and sign-in</h2><p>Clients check for changes every minute. Active remote sessions always keep the display awake.</p></div></div><form id="kiosk-settings-form" class="form-grid"><label>Turn display off after inactivity (minutes)<input name="screen_sleep_minutes" type="number" min="0" max="1440" required><small>Use 0 to disable display sleep</small></label><label>Client colour palette<select name="client_theme"><option value="ocean">Ocean</option><option value="graphite">Graphite</option><option value="forest">Forest</option><option value="sunset">Sunset</option><option value="high-contrast">High contrast</option></select></label><label>Shell appearance<select name="terminal_theme"><option value="dark">Dark</option><option value="light">Light</option></select><small>Applies to SSH and local maintenance shells</small></label><label class="check"><input name="show_user_list" type="checkbox"> Show users on the sign-in screen</label><button class="primary">Save kiosk settings</button></form></article>
       </section>
 
       <section id="credentials" class="view">
