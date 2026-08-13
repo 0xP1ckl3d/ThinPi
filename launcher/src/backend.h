@@ -160,6 +160,7 @@ private:
        m_hasMoreUsers = false, m_sshHostKeyConfirmation = false;
   bool m_sessionMinimized = false;
   bool m_updatingClipboard = false;
+  bool m_toolbarCursorOverride = false;
   QProcess *m_adminBrowser = nullptr;
   QString m_adminProfile, m_toolbarReturnWindow;
 };

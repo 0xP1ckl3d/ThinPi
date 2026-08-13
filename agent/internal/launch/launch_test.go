@@ -67,13 +67,16 @@ func TestMoonlightDirectLaunch(t *testing.T) {
 		t.Fatal(err)
 	}
 	joined := strings.Join(c.Args, " ")
-	for _, want := range []string{"stream gaming.local Desktop", "--resolution 1920x1080", "--fps 60", "--bitrate 20000", "--display-mode fullscreen", "--video-decoder auto"} {
+	for _, want := range []string{"stream gaming.local Desktop", "--resolution 1920x1080", "--fps 60", "--bitrate 20000", "--display-mode fullscreen", "--video-decoder auto", "--video-codec H.264", "--audio-config stereo"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("missing %q in %q", want, joined)
 		}
 	}
 	if strings.Contains(joined, "--video-decoder hardware") {
 		t.Fatal("Moonlight hardware decoding was forced on an unsupported client")
+	}
+	if !slices.Contains(c.Env, "SDL_AUDIODRIVER=pulseaudio") {
+		t.Fatalf("Moonlight was not configured for the deployed PulseAudio compatibility service: %#v", c.Env)
 	}
 	if strings.Contains(joined, "sunshine-admin") || strings.Contains(joined, "pairing-secret") {
 		t.Fatal("Sunshine administrator credential leaked into Moonlight arguments")

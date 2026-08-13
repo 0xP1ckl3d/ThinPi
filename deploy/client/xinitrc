@@ -5,6 +5,16 @@ xhost +SI:localuser:thinpi >/dev/null 2>&1 || true
 xhost - >/dev/null 2>&1 || true
 xset s off
 xset s noblank
+
+# The kiosk is not launched by a desktop session, so ensure its user audio
+# service is available before native clients such as Moonlight request it.
+if command -v systemctl >/dev/null 2>&1 && [ -n "${XDG_RUNTIME_DIR:-}" ]; then
+  systemctl --user start pipewire.socket pipewire-pulse.socket wireplumber.service >/dev/null 2>&1 || true
+fi
+if command -v pulseaudio >/dev/null 2>&1; then
+  pulseaudio --check >/dev/null 2>&1 || pulseaudio --start --exit-idle-time=-1 >/dev/null 2>&1 || true
+fi
+
 xbindkeys -n -f /usr/local/libexec/thinpi-xbindkeysrc &
 matchbox-window-manager -use_titlebar no &
 exec /usr/bin/thinpi-launcher

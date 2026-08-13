@@ -107,6 +107,10 @@ bool Backend::pointerOverToolbar(int left, int width, int height) const {
          position.y() >= 0 && position.y() < height;
 }
 void Backend::beginToolbarInteraction() {
+  if (!m_toolbarCursorOverride) {
+    QGuiApplication::setOverrideCursor(Qt::ArrowCursor);
+    m_toolbarCursorOverride = true;
+  }
   const auto xdotool = QStandardPaths::findExecutable("xdotool");
   if (xdotool.isEmpty())
     return;
@@ -121,6 +125,10 @@ void Backend::beginToolbarInteraction() {
     m_toolbarReturnWindow = window;
 }
 void Backend::endToolbarInteraction() {
+  if (m_toolbarCursorOverride) {
+    QGuiApplication::restoreOverrideCursor();
+    m_toolbarCursorOverride = false;
+  }
   if (m_toolbarReturnWindow.isEmpty())
     return;
   const auto xdotool = QStandardPaths::findExecutable("xdotool");

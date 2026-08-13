@@ -159,7 +159,11 @@ func configureNativeCommand(cmd *exec.Cmd, credential *syscall.Credential, sessi
 		}
 		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 	}
-	cmd.Env = append(os.Environ(), "HOME="+sessionHome, "USER=thinpi", "LOGNAME=thinpi", "THINPI_SESSION_HOME="+sessionHome)
+	runtimeDir := "/run/user/" + strconv.FormatUint(uint64(credential.Uid), 10)
+	cmd.Env = append(os.Environ(), "HOME="+sessionHome, "USER=thinpi", "LOGNAME=thinpi",
+		"THINPI_SESSION_HOME="+sessionHome, "XDG_RUNTIME_DIR="+runtimeDir,
+		"DBUS_SESSION_BUS_ADDRESS=unix:path="+runtimeDir+"/bus",
+		"PULSE_SERVER=unix:"+runtimeDir+"/pulse/native")
 	cmd.Env = append(cmd.Env, environment...)
 }
 

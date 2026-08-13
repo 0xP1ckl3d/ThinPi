@@ -812,7 +812,7 @@ func MoonlightCommand(binary string, x api.Manifest) (Command, error) {
 		return Command{}, errors.New("installed Moonlight CLI cannot enforce disabled client audio or gamepad input")
 	}
 	codec := strings.ToLower(cfg.Codec)
-	codecValues := map[string]string{"": "auto", "auto": "auto", "h264": "H.264", "h.264": "H.264", "hevc": "HEVC", "av1": "AV1"}
+	codecValues := map[string]string{"": "H.264", "auto": "H.264", "h264": "H.264", "h.264": "H.264", "hevc": "HEVC", "av1": "AV1"}
 	codecValue, ok := codecValues[codec]
 	if !ok {
 		return Command{}, errors.New("invalid Moonlight codec")
@@ -828,6 +828,7 @@ func MoonlightCommand(binary string, x api.Manifest) (Command, error) {
 		"--resolution", fmt.Sprintf("%dx%d", cfg.Width, cfg.Height),
 		"--fps", strconv.Itoa(cfg.FPS), "--bitrate", strconv.Itoa(cfg.BitrateKbps),
 		"--display-mode", "fullscreen", "--video-decoder", "auto", "--video-codec", codecValue,
+		"--audio-config", "stereo",
 		"--frame-pacing", "--keep-awake"}
 	if cfg.HDR {
 		args = append(args, "--hdr")
@@ -844,6 +845,7 @@ func MoonlightCommand(binary string, x api.Manifest) (Command, error) {
 	return Command{
 		Path: binary,
 		Args: args,
+		Env:  []string{"SDL_AUDIODRIVER=pulseaudio"},
 		MoonlightPairing: &MoonlightPairing{
 			Host: x.Host, Username: x.Username, Password: x.Password,
 			SunshineAPIPort: cfg.SunshineAPIPort, ClientName: cfg.PairingName,

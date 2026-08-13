@@ -40,4 +40,10 @@ func TestNativeClientCancellationTargetsProcessGroup(t *testing.T) {
 	if command.Cancel == nil {
 		t.Fatal("native client cancellation does not terminate its process group")
 	}
+	environment := strings.Join(command.Env, "\n")
+	for _, want := range []string{"XDG_RUNTIME_DIR=/run/user/1", "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1/bus", "PULSE_SERVER=unix:/run/user/1/pulse/native"} {
+		if !strings.Contains(environment, want) {
+			t.Fatalf("native client environment is missing %q: %s", want, environment)
+		}
+	}
 }
