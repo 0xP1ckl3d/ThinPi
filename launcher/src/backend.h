@@ -136,6 +136,7 @@ private:
   void closeAdministrationBrowser();
   void retainClipboard();
   void clearClipboard();
+  bool toggleMoonlightInputCapture(const QString &xdotool);
   QNetworkAccessManager m_network;
   ConnectionModel m_connections;
   QTimer m_poll, m_idle, m_keepalive, m_configurationPoll;
@@ -161,6 +162,7 @@ private:
   bool m_sessionMinimized = false;
   bool m_updatingClipboard = false;
   bool m_toolbarCursorOverride = false;
+  bool m_moonlightInputReleased = false;
   QProcess *m_adminBrowser = nullptr;
   QString m_adminProfile, m_toolbarReturnWindow;
 };

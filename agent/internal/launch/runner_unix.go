@@ -165,6 +165,16 @@ func configureNativeCommand(cmd *exec.Cmd, credential *syscall.Credential, sessi
 		"THINPI_SESSION_HOME="+sessionHome, "XDG_RUNTIME_DIR="+runtimeDir,
 		"DBUS_SESSION_BUS_ADDRESS=unix:path="+runtimeDir+"/bus",
 		"PULSE_SERVER=unix:"+runtimeDir+"/pulse/native", "SDL_AUDIODRIVER="+audioDriver)
+	if audioDriver == "alsa" {
+		if device := nativeALSAAudioDevice(); device != "" {
+			// Moonlight 6.1 on Raspberry Pi uses SDL2, which reads AUDIODEV.
+			// Set the SDL3 names too so a package upgrade keeps using the HDMI
+			// port that is physically connected rather than an arbitrary card.
+			cmd.Env = append(cmd.Env, "AUDIODEV="+device,
+				"SDL_AUDIO_ALSA_DEFAULT_DEVICE="+device,
+				"SDL_AUDIO_ALSA_DEFAULT_PLAYBACK_DEVICE="+device)
+		}
+	}
 	cmd.Env = append(cmd.Env, environment...)
 }
 
@@ -177,6 +187,21 @@ func nativeAudioDriver() string {
 		return "alsa"
 	}
 	return "pulseaudio"
+}
+
+func nativeALSAAudioDevice() string {
+	if configured := strings.TrimSpace(os.Getenv("THINPI_ALSA_DEVICE")); configured != "" {
+		return configured
+	}
+	model, _ := os.ReadFile("/proc/device-tree/model")
+	if !bytes.Contains(model, []byte("Raspberry Pi")) {
+		return ""
+	}
+	sysfsRoot := os.Getenv("THINPI_DRM_SYSFS_ROOT")
+	if sysfsRoot == "" {
+		sysfsRoot = "/sys/class/drm"
+	}
+	return piHDMIAudioDevice(sysfsRoot)
 }
 
 func clientExitedNormally(output string) bool {

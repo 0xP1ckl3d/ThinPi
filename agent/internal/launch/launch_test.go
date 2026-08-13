@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -83,6 +85,26 @@ func TestMoonlightDirectLaunch(t *testing.T) {
 	}
 	if c.MoonlightPairing.SunshineAPIPort != 47990 || c.MoonlightPairing.ClientName != "ThinPi" {
 		t.Fatalf("unexpected automatic pairing defaults: %#v", c.MoonlightPairing)
+	}
+}
+
+func TestPiHDMIAudioDeviceUsesConnectedPort(t *testing.T) {
+	root := t.TempDir()
+	disconnected := filepath.Join(root, "card1-HDMI-A-1")
+	connected := filepath.Join(root, "card1-HDMI-A-2")
+	for _, directory := range []string{disconnected, connected} {
+		if err := os.MkdirAll(directory, 0755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(disconnected, "status"), []byte("disconnected\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(connected, "status"), []byte("connected\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if got := piHDMIAudioDevice(root); got != "plughw:CARD=vc4hdmi1,DEV=0" {
+		t.Fatalf("unexpected ALSA device: %q", got)
 	}
 }
 

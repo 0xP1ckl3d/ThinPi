@@ -107,10 +107,6 @@ bool Backend::pointerOverToolbar(int left, int width, int height) const {
          position.y() >= 0 && position.y() < height;
 }
 void Backend::beginToolbarInteraction() {
-  if (!m_toolbarCursorOverride) {
-    QGuiApplication::setOverrideCursor(Qt::ArrowCursor);
-    m_toolbarCursorOverride = true;
-  }
   const auto xdotool = QStandardPaths::findExecutable("xdotool");
   if (xdotool.isEmpty())
     return;
@@ -121,8 +117,19 @@ void Backend::beginToolbarInteraction() {
   bool valid = false;
   const auto window = QString::fromUtf8(process.readAllStandardOutput()).trimmed();
   window.toULongLong(&valid);
-  if (valid)
+  if (valid) {
     m_toolbarReturnWindow = window;
+    // A fullscreen Moonlight window intentionally keeps SDL's mouse grab when
+    // it loses focus. Use Moonlight's own capture toggle before activating the
+    // toolbar so the local pointer and toolbar buttons actually receive input.
+    if (m_activeProtocol == QStringLiteral("MOONLIGHT") &&
+        !m_moonlightInputReleased)
+      m_moonlightInputReleased = toggleMoonlightInputCapture(xdotool);
+  }
+  if (!m_toolbarCursorOverride) {
+    QGuiApplication::setOverrideCursor(Qt::ArrowCursor);
+    m_toolbarCursorOverride = true;
+  }
 }
 void Backend::endToolbarInteraction() {
   if (m_toolbarCursorOverride) {
@@ -143,7 +150,25 @@ void Backend::endToolbarInteraction() {
   if (!process.waitForFinished(500)) {
     process.kill();
     process.waitForFinished(100);
+    return;
   }
+  if (m_moonlightInputReleased) {
+    toggleMoonlightInputCapture(xdotool);
+    m_moonlightInputReleased = false;
+  }
+}
+bool Backend::toggleMoonlightInputCapture(const QString &xdotool) {
+  QProcess process;
+  process.start(xdotool,
+                {QStringLiteral("key"), QStringLiteral("--clearmodifiers"),
+                 QStringLiteral("ctrl+alt+shift+z")});
+  if (!process.waitForFinished(500)) {
+    process.kill();
+    process.waitForFinished(100);
+    return false;
+  }
+  return process.exitStatus() == QProcess::NormalExit &&
+         process.exitCode() == 0;
 }
 void Backend::configureScreenSleep(bool sessionActive) {
   if (m_devMode)
