@@ -827,7 +827,8 @@ func MoonlightCommand(binary string, x api.Manifest) (Command, error) {
 	args := []string{"stream", moonlightHost, cfg.Application,
 		"--resolution", fmt.Sprintf("%dx%d", cfg.Width, cfg.Height),
 		"--fps", strconv.Itoa(cfg.FPS), "--bitrate", strconv.Itoa(cfg.BitrateKbps),
-		"--display-mode", "fullscreen", "--video-decoder", "auto", "--video-codec", codecValue,
+		"--display-mode", "borderless", "--absolute-mouse", "--capture-system-keys", "always",
+		"--video-decoder", "auto", "--video-codec", codecValue,
 		"--audio-config", "stereo",
 		"--frame-pacing", "--keep-awake"}
 	if cfg.HDR {

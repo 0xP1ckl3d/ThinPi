@@ -117,15 +117,8 @@ void Backend::beginToolbarInteraction() {
   bool valid = false;
   const auto window = QString::fromUtf8(process.readAllStandardOutput()).trimmed();
   window.toULongLong(&valid);
-  if (valid) {
+  if (valid)
     m_toolbarReturnWindow = window;
-    // A fullscreen Moonlight window intentionally keeps SDL's mouse grab when
-    // it loses focus. Use Moonlight's own capture toggle before activating the
-    // toolbar so the local pointer and toolbar buttons actually receive input.
-    if (m_activeProtocol == QStringLiteral("MOONLIGHT") &&
-        !m_moonlightInputReleased)
-      m_moonlightInputReleased = releaseMoonlightInputCapture(xdotool);
-  }
   if (!m_toolbarCursorOverride) {
     QGuiApplication::setOverrideCursor(Qt::ArrowCursor);
     m_toolbarCursorOverride = true;
@@ -152,39 +145,6 @@ void Backend::endToolbarInteraction() {
     process.waitForFinished(100);
     return;
   }
-  if (m_moonlightInputReleased) {
-    // Do not toggle the shortcut a second time. Once Moonlight has released
-    // keyboard capture, a synthetic shortcut can be accepted by X11 without
-    // reaching Moonlight, leaving its internal state permanently uncaptured.
-    // Moonlight explicitly recaptures on an unbound left-button release and
-    // consumes that click instead of forwarding it to the remote host.
-    if (recaptureMoonlightInput(xdotool))
-      m_moonlightInputReleased = false;
-  }
-}
-bool Backend::releaseMoonlightInputCapture(const QString &xdotool) {
-  QProcess process;
-  process.start(xdotool,
-                {QStringLiteral("key"), QStringLiteral("--clearmodifiers"),
-                 QStringLiteral("ctrl+alt+shift+z")});
-  if (!process.waitForFinished(500)) {
-    process.kill();
-    process.waitForFinished(100);
-    return false;
-  }
-  return process.exitStatus() == QProcess::NormalExit &&
-         process.exitCode() == 0;
-}
-bool Backend::recaptureMoonlightInput(const QString &xdotool) {
-  QProcess process;
-  process.start(xdotool, {QStringLiteral("click"), QStringLiteral("1")});
-  if (!process.waitForFinished(500)) {
-    process.kill();
-    process.waitForFinished(100);
-    return false;
-  }
-  return process.exitStatus() == QProcess::NormalExit &&
-         process.exitCode() == 0;
 }
 void Backend::configureScreenSleep(bool sessionActive) {
   if (m_devMode)

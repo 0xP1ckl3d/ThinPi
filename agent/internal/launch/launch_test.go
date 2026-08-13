@@ -69,7 +69,7 @@ func TestMoonlightDirectLaunch(t *testing.T) {
 		t.Fatal(err)
 	}
 	joined := strings.Join(c.Args, " ")
-	for _, want := range []string{"stream gaming.local Desktop", "--resolution 1920x1080", "--fps 60", "--bitrate 20000", "--display-mode fullscreen", "--video-decoder auto", "--video-codec H.264", "--audio-config stereo"} {
+	for _, want := range []string{"stream gaming.local Desktop", "--resolution 1920x1080", "--fps 60", "--bitrate 20000", "--display-mode borderless", "--absolute-mouse", "--capture-system-keys always", "--video-decoder auto", "--video-codec H.264", "--audio-config stereo"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("missing %q in %q", want, joined)
 		}
