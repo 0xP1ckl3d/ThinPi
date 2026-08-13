@@ -124,7 +124,7 @@ void Backend::beginToolbarInteraction() {
     // toolbar so the local pointer and toolbar buttons actually receive input.
     if (m_activeProtocol == QStringLiteral("MOONLIGHT") &&
         !m_moonlightInputReleased)
-      m_moonlightInputReleased = toggleMoonlightInputCapture(xdotool);
+      m_moonlightInputReleased = releaseMoonlightInputCapture(xdotool);
   }
   if (!m_toolbarCursorOverride) {
     QGuiApplication::setOverrideCursor(Qt::ArrowCursor);
@@ -153,15 +153,31 @@ void Backend::endToolbarInteraction() {
     return;
   }
   if (m_moonlightInputReleased) {
-    toggleMoonlightInputCapture(xdotool);
-    m_moonlightInputReleased = false;
+    // Do not toggle the shortcut a second time. Once Moonlight has released
+    // keyboard capture, a synthetic shortcut can be accepted by X11 without
+    // reaching Moonlight, leaving its internal state permanently uncaptured.
+    // Moonlight explicitly recaptures on an unbound left-button release and
+    // consumes that click instead of forwarding it to the remote host.
+    if (recaptureMoonlightInput(xdotool))
+      m_moonlightInputReleased = false;
   }
 }
-bool Backend::toggleMoonlightInputCapture(const QString &xdotool) {
+bool Backend::releaseMoonlightInputCapture(const QString &xdotool) {
   QProcess process;
   process.start(xdotool,
                 {QStringLiteral("key"), QStringLiteral("--clearmodifiers"),
                  QStringLiteral("ctrl+alt+shift+z")});
+  if (!process.waitForFinished(500)) {
+    process.kill();
+    process.waitForFinished(100);
+    return false;
+  }
+  return process.exitStatus() == QProcess::NormalExit &&
+         process.exitCode() == 0;
+}
+bool Backend::recaptureMoonlightInput(const QString &xdotool) {
+  QProcess process;
+  process.start(xdotool, {QStringLiteral("click"), QStringLiteral("1")});
   if (!process.waitForFinished(500)) {
     process.kill();
     process.waitForFinished(100);

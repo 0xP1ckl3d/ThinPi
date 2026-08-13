@@ -136,7 +136,8 @@ private:
   void closeAdministrationBrowser();
   void retainClipboard();
   void clearClipboard();
-  bool toggleMoonlightInputCapture(const QString &xdotool);
+  bool releaseMoonlightInputCapture(const QString &xdotool);
+  bool recaptureMoonlightInput(const QString &xdotool);
   QNetworkAccessManager m_network;
   ConnectionModel m_connections;
   QTimer m_poll, m_idle, m_keepalive, m_configurationPoll;

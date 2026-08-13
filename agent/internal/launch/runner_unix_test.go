@@ -34,7 +34,7 @@ func TestUserInitiatedRDPLogoffIsSuccessful(t *testing.T) {
 func TestNativeClientCancellationTargetsProcessGroup(t *testing.T) {
 	t.Setenv("THINPI_AUDIO_DRIVER", "alsa")
 	t.Setenv("THINPI_ALSA_DEVICE", "plughw:CARD=vc4hdmi0,DEV=0")
-	command := exec.Command("true")
+	command := exec.Command("moonlight-qt")
 	configureNativeCommand(command, &syscall.Credential{Uid: 1, Gid: 1}, "/home/thinpi", nil)
 	if command.SysProcAttr == nil || !command.SysProcAttr.Setpgid {
 		t.Fatal("native client was not placed in its own process group")

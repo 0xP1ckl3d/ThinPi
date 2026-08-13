@@ -9,9 +9,11 @@ import (
 	"os"
 	"os/exec"
 	"os/user"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 )
 
 type PlatformRunner struct{}
@@ -165,11 +167,11 @@ func configureNativeCommand(cmd *exec.Cmd, credential *syscall.Credential, sessi
 		"THINPI_SESSION_HOME="+sessionHome, "XDG_RUNTIME_DIR="+runtimeDir,
 		"DBUS_SESSION_BUS_ADDRESS=unix:path="+runtimeDir+"/bus",
 		"PULSE_SERVER=unix:"+runtimeDir+"/pulse/native", "SDL_AUDIODRIVER="+audioDriver)
-	if audioDriver == "alsa" {
-		if device := nativeALSAAudioDevice(); device != "" {
+	if audioDriver == "alsa" && strings.Contains(strings.ToLower(filepath.Base(cmd.Path)), "moonlight") {
+		if device := nativeALSAAudioDevice(credential, runtimeDir, sessionHome); device != "" {
 			// Moonlight 6.1 on Raspberry Pi uses SDL2, which reads AUDIODEV.
-			// Set the SDL3 names too so a package upgrade keeps using the HDMI
-			// port that is physically connected rather than an arbitrary card.
+			// Set the SDL3 names too so a package upgrade keeps using the
+			// discovered system playback device rather than an arbitrary card.
 			cmd.Env = append(cmd.Env, "AUDIODEV="+device,
 				"SDL_AUDIO_ALSA_DEFAULT_DEVICE="+device,
 				"SDL_AUDIO_ALSA_DEFAULT_PLAYBACK_DEVICE="+device)
@@ -189,7 +191,7 @@ func nativeAudioDriver() string {
 	return "pulseaudio"
 }
 
-func nativeALSAAudioDevice() string {
+func nativeALSAAudioDevice(credential *syscall.Credential, runtimeDir, sessionHome string) string {
 	if configured := strings.TrimSpace(os.Getenv("THINPI_ALSA_DEVICE")); configured != "" {
 		return configured
 	}
@@ -197,11 +199,44 @@ func nativeALSAAudioDevice() string {
 	if !bytes.Contains(model, []byte("Raspberry Pi")) {
 		return ""
 	}
-	sysfsRoot := os.Getenv("THINPI_DRM_SYSFS_ROOT")
-	if sysfsRoot == "" {
-		sysfsRoot = "/sys/class/drm"
+	asoundRoot := os.Getenv("THINPI_ASOUND_ROOT")
+	if asoundRoot == "" {
+		asoundRoot = "/proc/asound"
 	}
-	return piHDMIAudioDevice(sysfsRoot)
+	drmRoot := os.Getenv("THINPI_DRM_SYSFS_ROOT")
+	if drmRoot == "" {
+		drmRoot = "/sys/class/drm"
+	}
+	physical := piALSAAudioCandidates(asoundRoot, drmRoot)
+	for _, candidate := range append([]string{"default"}, physical...) {
+		if alsaPlaybackAvailable(candidate, credential, runtimeDir, sessionHome) {
+			return candidate
+		}
+	}
+	// Provisioning installs aplay, but retain a deterministic physical fallback
+	// if it is temporarily unavailable while packages are being upgraded.
+	if len(physical) > 0 {
+		return physical[0]
+	}
+	return ""
+}
+
+func alsaPlaybackAvailable(device string, credential *syscall.Credential, runtimeDir, sessionHome string) bool {
+	aplay, err := exec.LookPath("aplay")
+	if err != nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 750*time.Millisecond)
+	defer cancel()
+	probe := exec.CommandContext(ctx, aplay, "-q", "-D", device, "-t", "raw",
+		"-f", "S16_LE", "-c", "2", "-r", "48000", "/dev/null")
+	if credential != nil {
+		probe.SysProcAttr = &syscall.SysProcAttr{Credential: credential}
+	}
+	probe.Env = append(os.Environ(), "HOME="+sessionHome,
+		"XDG_RUNTIME_DIR="+runtimeDir,
+		"PULSE_SERVER=unix:"+runtimeDir+"/pulse/native")
+	return probe.Run() == nil
 }
 
 func clientExitedNormally(output string) bool {

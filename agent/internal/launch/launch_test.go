@@ -88,10 +88,11 @@ func TestMoonlightDirectLaunch(t *testing.T) {
 	}
 }
 
-func TestPiHDMIAudioDeviceUsesConnectedPort(t *testing.T) {
-	root := t.TempDir()
-	disconnected := filepath.Join(root, "card1-HDMI-A-1")
-	connected := filepath.Join(root, "card1-HDMI-A-2")
+func TestPiALSAAudioCandidatesPreferPhysicalThenConnectedHDMI(t *testing.T) {
+	asoundRoot := t.TempDir()
+	drmRoot := t.TempDir()
+	disconnected := filepath.Join(drmRoot, "card1-HDMI-A-1")
+	connected := filepath.Join(drmRoot, "card1-HDMI-A-2")
 	for _, directory := range []string{disconnected, connected} {
 		if err := os.MkdirAll(directory, 0755); err != nil {
 			t.Fatal(err)
@@ -103,8 +104,17 @@ func TestPiHDMIAudioDeviceUsesConnectedPort(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(connected, "status"), []byte("connected\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if got := piHDMIAudioDevice(root); got != "plughw:CARD=vc4hdmi1,DEV=0" {
-		t.Fatalf("unexpected ALSA device: %q", got)
+	cards := " 0 [vc4hdmi0     ]: vc4-hdmi - vc4-hdmi-0\n 1 [vc4hdmi1     ]: vc4-hdmi - vc4-hdmi-1\n 2 [USB            ]: USB-Audio - USB Speakers\n"
+	pcms := "00-00: MAI PCM : playback 1\n01-00: MAI PCM : playback 1\n02-00: USB Audio : playback 1 : capture 1\n"
+	if err := os.WriteFile(filepath.Join(asoundRoot, "cards"), []byte(cards), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(asoundRoot, "pcm"), []byte(pcms), 0644); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"plughw:CARD=USB,DEV=0", "plughw:CARD=vc4hdmi1,DEV=0", "plughw:CARD=vc4hdmi0,DEV=0"}
+	if got := piALSAAudioCandidates(asoundRoot, drmRoot); !slices.Equal(got, want) {
+		t.Fatalf("unexpected ALSA device order: got %#v want %#v", got, want)
 	}
 }
 
