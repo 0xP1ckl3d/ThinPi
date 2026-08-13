@@ -1,6 +1,7 @@
 #include "backend.h"
 #include <QClipboard>
 #include <QCoreApplication>
+#include <QCursor>
 #include <QDesktopServices>
 #include <QDir>
 #include <QEvent>
@@ -14,6 +15,7 @@
 #include <QNetworkRequest>
 #include <QProcess>
 #include <QProcessEnvironment>
+#include <QScreen>
 #include <QStandardPaths>
 #include <QUrl>
 #include <QUuid>
@@ -92,6 +94,11 @@ QString Backend::connectionSessionState(qint64 connectionID) const {
   if (session == m_sessions.constEnd())
     return {};
   return session->minimized ? QStringLiteral("minimized") : session->state;
+}
+bool Backend::pointerAtScreenTop() const {
+  const auto position = QCursor::pos();
+  const auto *screen = QGuiApplication::screenAt(position);
+  return screen && position.y() <= screen->geometry().top() + 1;
 }
 void Backend::configureScreenSleep(bool sessionActive) {
   if (m_devMode)
@@ -547,7 +554,17 @@ void Backend::launch(int row) {
   const auto id = m_connections.idAt(row);
   if (id == 0)
     return;
-  const auto existing = m_sessions.constFind(id);
+  auto existing = m_sessions.constFind(id);
+  if (existing != m_sessions.constEnd() &&
+      (existing->state == "error" || existing->state == "stopping")) {
+    if (!existing->id.isEmpty())
+      agentRequest({{"action", "cancel"}, {"session_id", existing->id}},
+                   [](QJsonObject) {});
+    m_sessions.remove(id);
+    ++m_sessionRevision;
+    emit sessionsChanged();
+    existing = m_sessions.constEnd();
+  }
   if (existing != m_sessions.constEnd()) {
     if (m_activeConnectionID != id) {
       m_activeConnectionID = id;
@@ -784,20 +801,33 @@ void Backend::resumeSession() {
   const auto session = m_sessions.constFind(m_activeConnectionID);
   if (session == m_sessions.constEnd() || session->id.isEmpty())
     return;
+  const auto connectionID = m_activeConnectionID;
+  const auto sessionID = session->id;
   agentRequest({{"action", "resume"}, {"session_id", session->id}},
-               [this](QJsonObject response) {
+               [this, connectionID, sessionID](QJsonObject response) {
     if (!response["accepted"].toBool()) {
-      m_error = "The minimized connection is no longer available.";
-      emit errorMessageChanged();
+      agentRequest({{"action", "cancel"}, {"session_id", sessionID}},
+                   [](QJsonObject) {});
+      m_sessions.remove(connectionID);
+      ++m_sessionRevision;
+      emit sessionsChanged();
+      setSessionActive(!m_sessions.isEmpty());
+      setSessionMinimized(false);
+      setView("dashboard");
+      const auto row = m_connections.indexOfId(connectionID);
+      if (row >= 0)
+        launch(row);
       return;
     }
-    setSessionMinimized(false);
-    auto current = m_sessions.value(m_activeConnectionID);
+    auto current = m_sessions.value(connectionID);
     current.minimized = false;
-    m_sessions.insert(m_activeConnectionID, current);
+    m_sessions.insert(connectionID, current);
     ++m_sessionRevision;
     emit sessionsChanged();
-    setView("session");
+    if (m_activeConnectionID == connectionID) {
+      setSessionMinimized(false);
+      setView("session");
+    }
   });
 }
 void Backend::resolveSSHHostKey(bool accept) {

@@ -454,9 +454,17 @@ func (m *Manager) Cancel(id string) error {
 		if len(m.sessions) == 0 {
 			return errors.New("no active session")
 		}
-		for _, session := range m.sessions {
+		for sessionID, session := range m.sessions {
+			terminal := session.status.State == Failed || session.pendingSSH != nil
 			session.status.State = Stopping
 			session.cancel()
+			terminateProcessGroup(session.pid)
+			if terminal {
+				delete(m.sessions, sessionID)
+				continue
+			}
+			forcedID := sessionID
+			time.AfterFunc(2*time.Second, func() { m.removeSession(forcedID) })
 		}
 		return nil
 	}
@@ -464,8 +472,15 @@ func (m *Manager) Cancel(id string) error {
 	if session == nil {
 		return errors.New("no active session")
 	}
+	terminal := session.status.State == Failed || session.pendingSSH != nil
 	session.status.State = Stopping
 	session.cancel()
+	terminateProcessGroup(session.pid)
+	if terminal {
+		delete(m.sessions, id)
+	} else {
+		time.AfterFunc(2*time.Second, func() { m.removeSession(id) })
+	}
 	return nil
 }
 

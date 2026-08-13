@@ -80,6 +80,7 @@ public:
                                  const QString &newPassword);
   Q_INVOKABLE void endSession();
   Q_INVOKABLE void minimizeSession();
+  Q_INVOKABLE bool pointerAtScreenTop() const;
   Q_INVOKABLE QString connectionSessionState(qint64 connectionID) const;
   Q_INVOKABLE void dismissError();
   Q_INVOKABLE void retry();
