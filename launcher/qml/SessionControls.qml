@@ -17,14 +17,16 @@ Window {
     x: Math.round((Screen.width - width) / 2)
     y: deployed ? 0 : -height
     color: "transparent"
-    flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.X11BypassWindowManagerHint
+    // The strip only needs pointer input. Keeping it out of the X11 keyboard
+    // focus chain prevents hovering or clicking it from taking keyboard input
+    // away from the active remote client.
+    flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.X11BypassWindowManagerHint | Qt.WindowDoesNotAcceptFocus
     function activateInteraction() {
         if (interacting || suppressInteraction)
             return
         backend.beginToolbarInteraction()
         interacting = true
         controls.raise()
-        controls.requestActivate()
     }
     function deactivateInteraction() {
         if (!interacting)

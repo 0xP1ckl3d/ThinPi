@@ -129,22 +129,9 @@ void Backend::endToolbarInteraction() {
     QGuiApplication::restoreOverrideCursor();
     m_toolbarCursorOverride = false;
   }
-  if (m_toolbarReturnWindow.isEmpty())
-    return;
-  const auto xdotool = QStandardPaths::findExecutable("xdotool");
-  const auto window = m_toolbarReturnWindow;
+  // SessionControls is deliberately non-focusable, so the remote window never
+  // loses keyboard focus and must not be artificially reactivated here.
   m_toolbarReturnWindow.clear();
-  if (xdotool.isEmpty())
-    return;
-  QProcess process;
-  process.start(
-      xdotool,
-      {QStringLiteral("windowactivate"), QStringLiteral("--sync"), window});
-  if (!process.waitForFinished(500)) {
-    process.kill();
-    process.waitForFinished(100);
-    return;
-  }
 }
 void Backend::configureScreenSleep(bool sessionActive) {
   if (m_devMode)
