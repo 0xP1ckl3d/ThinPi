@@ -126,10 +126,16 @@ void Backend::endToolbarInteraction() {
   const auto xdotool = QStandardPaths::findExecutable("xdotool");
   const auto window = m_toolbarReturnWindow;
   m_toolbarReturnWindow.clear();
-  if (!xdotool.isEmpty())
-    QProcess::startDetached(
-        xdotool,
-        {QStringLiteral("windowactivate"), QStringLiteral("--sync"), window});
+  if (xdotool.isEmpty())
+    return;
+  QProcess process;
+  process.start(
+      xdotool,
+      {QStringLiteral("windowactivate"), QStringLiteral("--sync"), window});
+  if (!process.waitForFinished(500)) {
+    process.kill();
+    process.waitForFinished(100);
+  }
 }
 void Backend::configureScreenSleep(bool sessionActive) {
   if (m_devMode)
@@ -794,9 +800,15 @@ void Backend::pollAgent() {
   });
 }
 void Backend::endSession() {
+  const auto remoteWindow = m_toolbarReturnWindow;
+  endToolbarInteraction();
   const auto session = m_sessions.constFind(m_activeConnectionID);
   if (session == m_sessions.constEnd() || session->id.isEmpty())
     return;
+  const auto xdotool = QStandardPaths::findExecutable("xdotool");
+  if (!xdotool.isEmpty() && !remoteWindow.isEmpty())
+    QProcess::startDetached(xdotool,
+                            {QStringLiteral("windowclose"), remoteWindow});
   agentRequest({{"action", "cancel"}, {"session_id", session->id}},
                [this](QJsonObject response) {
                  if (!response["accepted"].toBool()) {
@@ -808,6 +820,7 @@ void Backend::endSession() {
                });
 }
 void Backend::minimizeSession() {
+  endToolbarInteraction();
   const auto session = m_sessions.constFind(m_activeConnectionID);
   if (session == m_sessions.constEnd() || session->id.isEmpty() ||
       session->minimized || session->state != "active")

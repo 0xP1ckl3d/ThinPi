@@ -9,6 +9,7 @@ Window {
     property bool pinned: false
     property bool dragging: false
     property bool interacting: false
+    property bool suppressInteraction: false
     property real dragOffsetX: 0
     readonly property bool deployed: revealed || pinned || dragging
     width: 340
@@ -18,7 +19,7 @@ Window {
     color: "transparent"
     flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.X11BypassWindowManagerHint
     function activateInteraction() {
-        if (interacting)
+        if (interacting || suppressInteraction)
             return
         backend.beginToolbarInteraction()
         interacting = true
@@ -31,12 +32,17 @@ Window {
         interacting = false
         backend.endToolbarInteraction()
     }
+    function prepareAction() {
+        suppressInteraction = true
+        interacting = false
+    }
     onVisibleChanged: {
         if (!visible)
             deactivateInteraction()
         revealed = false
         pinned = false
         dragging = false
+        suppressInteraction = false
         if (visible)
             edgePoll.restart()
     }
@@ -119,7 +125,10 @@ Window {
                 implicitWidth: 38
                 implicitHeight: 30
                 focusPolicy: Qt.NoFocus
-                onClicked: backend.minimizeSession()
+                onClicked: {
+                    controls.prepareAction()
+                    backend.minimizeSession()
+                }
                 contentItem: Label { text: minimizeButton.text; color: theme.text; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 18; font.bold: true }
                 background: Rectangle { radius: 6; color: minimizeButton.hovered ? theme.surfaceHover : theme.backgroundAlt; border.color: theme.border }
             }
@@ -130,7 +139,10 @@ Window {
                 implicitWidth: 38
                 implicitHeight: 30
                 focusPolicy: Qt.NoFocus
-                onClicked: backend.endSession()
+                onClicked: {
+                    controls.prepareAction()
+                    backend.endSession()
+                }
                 contentItem: Label { text: closeButton.text; color: "#ffb5bf"; horizontalAlignment: Text.AlignHCenter; verticalAlignment: Text.AlignVCenter; font.pixelSize: 19; font.bold: true }
                 background: Rectangle { radius: 6; color: closeButton.hovered ? "#3b1c27" : "#281720"; border.color: "#7a3547" }
             }
@@ -168,7 +180,7 @@ Window {
         repeat: true
         running: controls.visible && controls.deployed
         onTriggered: {
-            if (controls.dragging)
+            if (controls.dragging || controls.suppressInteraction)
                 return
             if (backend.pointerOverToolbar(controls.x, controls.width, controls.height)) {
                 hideTimer.stop()
