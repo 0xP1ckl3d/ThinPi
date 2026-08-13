@@ -147,6 +147,12 @@ func configureNativeCommand(cmd *exec.Cmd, credential *syscall.Credential, sessi
 		return
 	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{Credential: credential, Setpgid: true}
+	cmd.Cancel = func() error {
+		if cmd.Process == nil {
+			return os.ErrProcessDone
+		}
+		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	}
 	cmd.Env = append(os.Environ(), "HOME="+sessionHome, "USER=thinpi", "LOGNAME=thinpi", "THINPI_SESSION_HOME="+sessionHome)
 	cmd.Env = append(cmd.Env, environment...)
 }

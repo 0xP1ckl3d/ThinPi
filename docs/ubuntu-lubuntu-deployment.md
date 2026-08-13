@@ -279,8 +279,13 @@ sudo sh /tmp/thinpi/deploy-client/provision.sh \
   --device-id lubuntu-canary-01 \
   --name 'Lubuntu canary VM' \
   --ca-certificate /tmp/thinpi-ca.crt \
+  --screen-sleep-minutes 15 \
   --moonlight yes
 ```
+
+`--screen-sleep-minutes` controls display power-down after local keyboard and
+mouse inactivity. Use `0` to disable it. Display sleep pauses automatically
+while a remote session is active.
 
 Moonlight's APT repository does not publish an Ubuntu 26.04 package. The
 provisioner therefore downloads the official Moonlight 6.1.0 x86-64 AppImage,
@@ -318,6 +323,10 @@ Required: `thinpi.target`, both services `active`, `thinpi` uses
 real assigned connection, administrator dashboard handoff, and authorised
 local maintenance. Normal users must not reach a local shell, another browser
 origin, a second SSH tab, virtual terminals, downloads, or developer tools.
+
+Also verify that the display powers down after the configured idle period and
+wakes on keyboard or mouse input. Windows/Command+L must close any active native
+session, sign out the dashboard user, and return to the ThinPi login screen.
 
 If the kiosk fails, do not reinstall blindly. SSH still works with the key:
 

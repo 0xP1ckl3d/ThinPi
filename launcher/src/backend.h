@@ -35,6 +35,7 @@ public:
     bool busy()const{return m_busy;} bool isAdmin()const{return m_isAdmin;} bool sessionActive()const{return m_sessionActive;} bool devMode()const{return m_devMode;} bool sshHostKeyConfirmation()const{return m_sshHostKeyConfirmation;} ConnectionModel* connections(){return &m_connections;}
     Q_INVOKABLE void login(const QString &username,const QString &password);
     Q_INVOKABLE void logout(); Q_INVOKABLE void refresh(); Q_INVOKABLE void launch(int row);
+    Q_INVOKABLE void lockKiosk();
     Q_INVOKABLE void openAdministration();
     Q_INVOKABLE void openMaintenance();
     Q_INVOKABLE void updateProfile(const QString &username,const QString &displayName,const QString &currentPassword,const QString &newPassword);
@@ -50,11 +51,13 @@ private:
     void agentRequest(const QJsonObject &request,std::function<void(QJsonObject)> complete);
     void pollAgent();
     void armIdleLock(); void clearLocalSession(); void loadLoginUsers(); void keepSessionAlive(); void setSessionActive(bool active);
+    void configureScreenSleep(bool sessionActive); void closeAdministrationBrowser();
     QNetworkAccessManager m_network;ConnectionModel m_connections;QTimer m_poll,m_idle,m_keepalive;
     QString m_apiUrl,m_agentSocket,m_token,m_deviceIdentifier,m_view="login",m_username,m_displayName,m_error,m_sessionMessage,m_restrictionMessage,m_activeName,m_activeProtocol;
     qint64 m_activeConnectionID=0;
     QVariantList m_loginUsers;
     int m_idleMinutes=30;
+    int m_screenSleepMinutes=15;
     bool m_busy=false,m_isAdmin=false,m_devMode=false,m_seenActive=false,m_sessionActive=false,m_sessionExpired=false,m_hasMoreUsers=false,m_sshHostKeyConfirmation=false;
     QProcess *m_adminBrowser=nullptr;
     QString m_adminProfile;

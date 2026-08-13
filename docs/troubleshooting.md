@@ -3,64 +3,6 @@
 Start at the failing boundary. Do not disable TLS, certificate checking,
 authentication, or kiosk hardening to make a symptom disappear.
 
-## Local Windows environment
-
-### `dev-up.ps1` cannot connect to Docker
-
-1. Start Docker Desktop and wait for the engine to report running.
-2. Run:
-
-   ```powershell
-   docker version
-   docker compose version
-   ```
-
-3. Restart with:
-
-   ```powershell
-   .\scripts\dev-down.ps1
-   .\scripts\dev-up.ps1
-   ```
-
-The development scripts use a repository-local Docker CLI configuration under
-`.docker-config` to avoid unrelated user-config permission failures.
-
-### Qt, CMake, Ninja, or MinGW is missing
-
-Install the Qt 6.5+ MinGW 64-bit kit plus Qt's CMake, Ninja, and MinGW tools.
-Normal installations under `C:\Qt` are discovered automatically. For a custom
-location:
-
-```powershell
-$env:QT_ROOT = 'D:\Qt\6.10.1\mingw_64'
-.\scripts\dev-up.ps1
-```
-
-### Local agent/named-pipe failure
-
-```powershell
-.\scripts\dev-status.ps1
-Get-Content .\.thinpi-dev\agent.err.log
-Get-Content .\.thinpi-dev\agent.out.log
-```
-
-Then perform a clean process restart without deleting data:
-
-```powershell
-.\scripts\dev-down.ps1
-.\scripts\dev-up.ps1
-```
-
-### Old development users or stale UI
-
-Hard-refresh the browser after rebuilding. To remove the persistent test
-database:
-
-```powershell
-.\scripts\dev-down.ps1 -ResetData
-.\scripts\dev-up.ps1
-```
-
 ## Admin browser
 
 ### `/admin` shows login or session expired
@@ -275,6 +217,30 @@ getent passwd thinpi
 The Xorg file must set `DontVTSwitch`, `DontZap`, and `DontZoom`; default must
 be `thinpi.target`; getties must be masked; and `thinpi` must use
 `/usr/sbin/nologin`. Re-run the current provisioner if any are missing.
+
+Windows/Command+L is the intentional exception: it must disconnect any active
+native session and sign out to the ThinPi login screen. If it does nothing,
+check and redeploy the shortcut configuration:
+
+```sh
+command -v xbindkeys
+cat /usr/local/libexec/thinpi-xbindkeysrc
+pgrep -a xbindkeys
+sudo journalctl -b -u thinpi-ui --no-pager
+```
+
+### Display does not sleep or sleeps during a remote session
+
+```sh
+grep THINPI_SCREEN_SLEEP_MINUTES /etc/thinpi/ui.env
+sudo -u thinpi env DISPLAY=:0 XAUTHORITY=/home/thinpi/.Xauthority xset q
+sudo journalctl -b -u thinpi-ui --no-pager
+```
+
+The timeout must be an integer from `0` through `1440`; `0` disables sleep.
+ThinPi configures Xorg DPMS while the login or dashboard is visible and disables
+DPMS while a native session is connecting or active. After changing the value,
+restart the UI with `sudo systemctl restart thinpi-ui`.
 
 ### FreeRDP unavailable or exits immediately
 

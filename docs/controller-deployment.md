@@ -1,9 +1,9 @@
 # Controller reference
 
-> Do not start here for a first deployment. Follow
-> [Deploy ThinPi from zero](deployment.md); it tells you exactly when to use
-> this reference. This page is for alternate controller operating systems,
-> certificate arrangements and ongoing operations.
+> For an Ubuntu controller paired with a Lubuntu client, the
+> [worked Ubuntu/Lubuntu guide](ubuntu-lubuntu-deployment.md) provides a complete
+> example. This page is the general controller reference for certificate
+> arrangements and ongoing operations.
 
 The worked example uses:
 

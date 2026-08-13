@@ -34,6 +34,7 @@ if systemctl list-unit-files thinpi-agent.service --no-legend 2>/dev/null | grep
   sudo install -m 0755 /tmp/thinpi/deploy-client/xinitrc /usr/local/libexec/thinpi-xinitrc
   sudo install -m 0755 /tmp/thinpi/deploy-client/maintenance-session.sh /usr/local/libexec/thinpi-maintenance-session
   sudo install -m 0755 /tmp/thinpi/deploy-client/browser-policy.sh /usr/local/libexec/thinpi-browser-policy
+  sudo install -m 0644 /tmp/thinpi/deploy-client/thinpi-xbindkeysrc /usr/local/libexec/thinpi-xbindkeysrc
   sudo install -m 0644 /tmp/thinpi/deploy-client/hardening/Xwrapper.config /etc/X11/Xwrapper.config
   sudo install -m 0644 /tmp/thinpi/deploy-client/hardening/10-thinpi-kiosk.conf /etc/X11/xorg.conf.d/10-thinpi-kiosk.conf
   sudo install -m 0644 /tmp/thinpi/deploy-client/hardening/99-thinpi-ssh.conf /etc/ssh/sshd_config.d/99-thinpi.conf
@@ -56,6 +57,10 @@ if systemctl list-unit-files thinpi-agent.service --no-legend 2>/dev/null | grep
     sudo apt-get update
     sudo apt-get install -y libnss3-tools
   }
+  if ! command -v xbindkeys >/dev/null 2>&1 || ! command -v pkill >/dev/null 2>&1; then
+    sudo apt-get update
+    sudo apt-get install -y --no-install-recommends xbindkeys procps
+  fi
   # /etc/thinpi is intentionally inaccessible to the SSH deployment user.
   # Read the controller URL through sudo; do not hide a failed read behind a
   # pipeline whose final command exits successfully.

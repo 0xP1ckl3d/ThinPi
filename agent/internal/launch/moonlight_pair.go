@@ -17,7 +17,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -253,11 +252,6 @@ func writeSunshineCertificates(path string, trusted map[string]string) error {
 func defaultSunshineCertificatesPath() string {
 	if configured := os.Getenv("THINPI_SUNSHINE_CERTIFICATES"); configured != "" {
 		return configured
-	}
-	if runtime.GOOS == "windows" {
-		if root, err := os.UserConfigDir(); err == nil {
-			return filepath.Join(root, "ThinPi", "sunshine-certificates.json")
-		}
 	}
 	return "/var/lib/thinpi-agent/sunshine-certificates.json"
 }

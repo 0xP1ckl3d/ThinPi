@@ -11,12 +11,13 @@ Options:
   --ca-certificate FILE          Private controller CA certificate
   --platform auto|generic|raspberry-pi
   --moonlight auto|yes|no        Install Moonlight (default auto)
+  --screen-sleep-minutes MINUTES Turn off an idle display after 0-1440 minutes (default 15; 0 disables)
   --disable-ssh-passwords        Opt in to key-only administrator SSH
 EOF
 }
 
 SERVER="" TOKEN="" DEVICE_ID="" DEVICE_NAME="ThinPi" CA_FILE=""
-PLATFORM=auto MOONLIGHT=auto DISABLE_SSH_PASSWORDS=false
+PLATFORM=auto MOONLIGHT=auto SCREEN_SLEEP_MINUTES=15 DISABLE_SSH_PASSWORDS=false
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --server) SERVER=${2:-}; shift 2;;
@@ -26,6 +27,7 @@ while [ "$#" -gt 0 ]; do
     --ca-certificate) CA_FILE=${2:-}; shift 2;;
     --platform) PLATFORM=${2:-}; shift 2;;
     --moonlight) MOONLIGHT=${2:-}; shift 2;;
+    --screen-sleep-minutes) SCREEN_SLEEP_MINUTES=${2:-}; shift 2;;
     --disable-ssh-passwords) DISABLE_SSH_PASSWORDS=true; shift;;
     --help|-h) usage; exit 0;;
     *) echo "Unknown option: $1" >&2; usage >&2; exit 2;;
@@ -38,6 +40,8 @@ case "$SERVER" in https://*) ;; *) echo "--server must be an HTTPS URL" >&2; exi
 case "$SERVER" in *[[:space:]]*) echo "--server cannot contain whitespace" >&2; exit 2;; esac
 case "$PLATFORM" in auto|generic|raspberry-pi) ;; *) echo "Invalid --platform value" >&2; exit 2;; esac
 case "$MOONLIGHT" in auto|yes|no) ;; *) echo "Invalid --moonlight value" >&2; exit 2;; esac
+case "$SCREEN_SLEEP_MINUTES" in ''|*[!0-9]*) echo "Invalid --screen-sleep-minutes value" >&2; exit 2;; esac
+[ "$SCREEN_SLEEP_MINUTES" -le 1440 ] || { echo "--screen-sleep-minutes must be between 0 and 1440" >&2; exit 2; }
 [ -z "$CA_FILE" ] || [ -r "$CA_FILE" ] || { echo "--ca-certificate is not readable" >&2; exit 2; }
 
 SCRIPT_DIR=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd)
@@ -47,10 +51,6 @@ thinpi_load_supported_os
 
 ARCH=$(dpkg --print-architecture)
 case "$ARCH" in amd64|arm64) ;; *) echo "ThinPi supports amd64 and arm64 clients; got $ARCH" >&2; exit 1;; esac
-if [ "$THINPI_OS_FAMILY" = ubuntu ] && [ "$ARCH" != amd64 ]; then
-  echo "Ubuntu/Lubuntu ThinPi clients currently require amd64; use Debian 13 for arm64 clients" >&2
-  exit 1
-fi
 IS_PI=false
 if [ -r /proc/device-tree/model ] && grep -q "Raspberry Pi" /proc/device-tree/model; then IS_PI=true; fi
 if [ "$PLATFORM" = auto ]; then
@@ -59,6 +59,9 @@ fi
 if [ "$PLATFORM" = raspberry-pi ]; then
   [ "$ARCH" = arm64 ] || { echo "Raspberry Pi clients require the arm64 OS" >&2; exit 1; }
   [ "$IS_PI" = true ] || { echo "--platform raspberry-pi was selected but Raspberry Pi hardware was not detected" >&2; exit 1; }
+  [ "$THINPI_OS_FAMILY" = debian ] || { echo "Raspberry Pi clients require Raspberry Pi OS Lite 64-bit based on Debian 13 (Trixie)" >&2; exit 1; }
+else
+  [ "$ARCH" = amd64 ] && [ "$THINPI_OS_FAMILY" = ubuntu ] || { echo "Generic ThinPi clients require Lubuntu 24.04 or 26.04 LTS on amd64" >&2; exit 1; }
 fi
 
 if [ -x /usr/local/bin/thinpi-agent ] && [ -x /usr/local/bin/thinpi-launcher ]; then
@@ -112,7 +115,7 @@ apt-get install -y --no-install-recommends \
   qml6-module-qtquick-controls qml6-module-qtquick-layouts \
   qml6-module-qtquick-window $AUDIO_PACKAGES curl ca-certificates jq bash \
   tigervnc-viewer tigervnc-tools openssh-client openssh-server \
-  sshpass xterm kbd util-linux libnss3-tools
+  sshpass xterm xbindkeys procps kbd util-linux libnss3-tools
 if [ "$PLATFORM" = generic ]; then
   apt-get install -y --no-install-recommends xserver-xorg-video-all libgl1-mesa-dri
 fi
@@ -248,6 +251,7 @@ install -d -o root -g root -m 0755 /usr/local/libexec /etc/X11/xorg.conf.d \
 install -m 0755 "$SCRIPT_DIR/xinitrc" /usr/local/libexec/thinpi-xinitrc
 install -m 0755 "$SCRIPT_DIR/maintenance-session.sh" /usr/local/libexec/thinpi-maintenance-session
 install -m 0755 "$SCRIPT_DIR/browser-policy.sh" /usr/local/libexec/thinpi-browser-policy
+install -m 0644 "$SCRIPT_DIR/thinpi-xbindkeysrc" /usr/local/libexec/thinpi-xbindkeysrc
 install -m 0644 "$SCRIPT_DIR/hardening/Xwrapper.config" /etc/X11/Xwrapper.config
 install -m 0644 "$SCRIPT_DIR/hardening/10-thinpi-kiosk.conf" /etc/X11/xorg.conf.d/10-thinpi-kiosk.conf
 install -m 0644 "$SCRIPT_DIR/hardening/99-thinpi-ssh.conf" /etc/ssh/sshd_config.d/99-thinpi.conf
@@ -277,7 +281,7 @@ jq -n --arg controller "$SERVER" --arg maintenance_user "$ADMIN_USER" --arg ca "
   '{controller_url:$controller,device_file:"/etc/thinpi/device.json",socket:"/run/thinpi/agent.sock",freerdp_binary:"auto",moonlight_binary:"auto",vnc_binary:"auto",ssh_binary:"auto",terminal_binary:"auto",sshpass_binary:"auto",maintenance_user:$maintenance_user} + (if $ca == "" then {} else {ca_certificate:$ca} end)' \
   > /etc/thinpi/agent.json
 chmod 0640 /etc/thinpi/agent.json
-printf 'THINPI_API_URL=%s\nTHINPI_ADMIN_BROWSER=%s\n' "$SERVER" "$ADMIN_BROWSER" > /etc/thinpi/ui.env
+printf 'THINPI_API_URL=%s\nTHINPI_ADMIN_BROWSER=%s\nTHINPI_SCREEN_SLEEP_MINUTES=%s\n' "$SERVER" "$ADMIN_BROWSER" "$SCREEN_SLEEP_MINUTES" > /etc/thinpi/ui.env
 chmod 0644 /etc/thinpi/ui.env
 /usr/local/libexec/thinpi-browser-policy "$SERVER"
 if [ -z "$TOKEN" ]; then

@@ -3,9 +3,9 @@
 ulimit -c 0
 xhost +SI:localuser:thinpi >/dev/null 2>&1 || true
 xhost - >/dev/null 2>&1 || true
-xset -dpms
 xset s off
 xset s noblank
+xbindkeys -n -f /usr/local/libexec/thinpi-xbindkeysrc &
 if [ "${THINPI_SHOW_CURSOR:-no}" = yes ]; then
   matchbox-window-manager -use_titlebar no &
 else

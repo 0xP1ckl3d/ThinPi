@@ -1,15 +1,13 @@
 # Raspberry Pi deployment reference
 
-> Do not start here for a first deployment. Follow
-> [Deploy ThinPi from zero](deployment.md). That end-to-end guide explains the
-> controller, address, certificate, DNS choice and enrolment token before it
-> sends you to the Pi.
+> Configure and verify the controller first using
+> [controller-deployment.md](controller-deployment.md). This page then covers
+> the complete Raspberry Pi client path.
 
-This Pi-specific supplement converts a dedicated Raspberry Pi into the ThinPi
-kiosk. Shared build, provision, hardening and update code lives under
-`deploy/client`; see [client-deployment.md](client-deployment.md) for VMs, mini
-PCs and generic ARM64 devices. Complete the
-[controller runbook](controller-deployment.md) first.
+This runbook converts a dedicated Raspberry Pi into the ThinPi kiosk. Shared
+build, provision, hardening and update code lives under `deploy/client`. For an
+x86-64 client, use the
+[worked Ubuntu/Lubuntu guide](ubuntu-lubuntu-deployment.md).
 
 Provisioning is intentionally invasive. It installs native clients, creates a
 non-login kiosk user, preserves the configured administrator SSH authentication, and blocks ordinary virtual-console
@@ -30,7 +28,7 @@ deployment so DNS is optional.
 | Controller URL | `https://thinpi.home.example:8443` |
 | Private CA file | `thinpi-ca.crt` |
 
-Replace these with the values in [deployment.md](deployment.md).
+Replace these examples with your production values.
 
 ## 1. Hardware and workstation requirements
 
@@ -38,7 +36,7 @@ Use:
 
 - Raspberry Pi 4 or 5;
 - reliable power supply and cooling;
-- Raspberry Pi OS Lite **64-bit**, Debian Trixie or later;
+- Raspberry Pi OS Lite **64-bit**, Debian Trixie;
 - wired Ethernet where practical, especially for Moonlight;
 - display, keyboard/mouse, and any gamepad required for acceptance testing;
 - 16 GiB or larger high-quality SD card/SSD;
@@ -272,6 +270,7 @@ sudo sh /tmp/thinpi/deploy-client/provision.sh \
   --server https://thinpi.home.example:8443 \
   --device-id pi-living-room \
   --name 'Living room' \
+  --screen-sleep-minutes 15 \
   --ca-certificate /tmp/thinpi-ca.crt
 ```
 
@@ -283,6 +282,7 @@ sudo sh /tmp/thinpi/deploy-client/provision.sh \
   --server https://10.10.10.60:8443 \
   --device-id thinpi-pi-01 \
   --name "Dining Room Pi" \
+  --screen-sleep-minutes 15 \
   --ca-certificate /tmp/thinpi-ca.crt
 ```
 
@@ -310,6 +310,8 @@ It then:
 - installs a private CA into both agent and system trust stores;
 - writes `/etc/thinpi/device.json` mode `0600`;
 - installs hardened agent/UI systemd services;
+- configures energy-saving display sleep and the system-wide Windows/Command+L
+  sign-out shortcut;
 - installs the locked xterm/OpenSSH client with device-local first-use host-key trust;
 - masks ordinary local getties and blocks kiosk VT escape shortcuts;
 - installs the administrator-only, one-use-ticket maintenance console;
@@ -401,7 +403,9 @@ Then test:
 - real RDP/VNC/SSH/Moonlight failure messages return to the dashboard;
 - closing a native client returns to the launcher;
 - administrator launcher login shows **Administration** and opens Chromium;
-- session time limit ends the client and reports the reason.
+- session time limit ends the client and reports the reason;
+- the display powers down after the configured idle period and wakes on input;
+- Windows/Command+L disconnects an active session and returns to login.
 
 ## 12. Production configuration files
 
@@ -421,8 +425,9 @@ Then test:
 | `sshpass_binary` | `auto` or explicit SSH password helper |
 | `maintenance_user` | Existing non-root Pi administrator opened by a valid maintenance ticket |
 
-`/etc/thinpi/ui.env` contains `THINPI_API_URL` and may contain
-`THINPI_ADMIN_BROWSER` if Chromium has a non-standard executable name.
+`/etc/thinpi/ui.env` contains `THINPI_API_URL`, `THINPI_ADMIN_BROWSER`, and
+`THINPI_SCREEN_SLEEP_MINUTES`. The sleep value accepts `0` (disabled) through
+`1440`. After editing it, run `sudo systemctl restart thinpi-ui`.
 
 Never add `mock_clients`, `THINPI_DEV_MODE`, a user token, a remote password,
 or the device token to the launcher environment.

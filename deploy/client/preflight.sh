@@ -11,15 +11,16 @@ thinpi_load_supported_os
 export PATH=/usr/local/go/bin:"$PATH"
 ARCH=$(dpkg --print-architecture)
 case "$ARCH" in amd64|arm64) ;; *) echo "amd64 or arm64 is required; found $ARCH" >&2; exit 1;; esac
-if [ "$THINPI_OS_FAMILY" = ubuntu ] && [ "$ARCH" != amd64 ]; then
-  echo "Ubuntu/Lubuntu ThinPi clients currently require amd64; use Debian 13 for arm64 clients" >&2
-  exit 1
-fi
-
 IS_PI=false
 if [ -r /proc/device-tree/model ] && grep -q "Raspberry Pi" /proc/device-tree/model; then IS_PI=true; fi
+if [ "$PLATFORM" = auto ]; then
+  if [ "$IS_PI" = true ]; then PLATFORM=raspberry-pi; else PLATFORM=generic; fi
+fi
 if [ "$PLATFORM" = raspberry-pi ]; then
   [ "$ARCH" = arm64 ] && [ "$IS_PI" = true ] || { echo "The Raspberry Pi platform requires arm64 Raspberry Pi hardware" >&2; exit 1; }
+  [ "$THINPI_OS_FAMILY" = debian ] || { echo "Raspberry Pi clients require Raspberry Pi OS Lite 64-bit based on Debian 13 (Trixie)" >&2; exit 1; }
+else
+  [ "$ARCH" = amd64 ] && [ "$THINPI_OS_FAMILY" = ubuntu ] || { echo "Generic ThinPi clients require Lubuntu 24.04 or 26.04 LTS on amd64" >&2; exit 1; }
 fi
 
 for tool in rsync go cmake ninja qmake6 g++; do

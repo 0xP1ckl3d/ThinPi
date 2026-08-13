@@ -25,6 +25,8 @@ done
 
 grep -F 'amd64|arm64' "$ROOT/deploy/client/provision.sh" >/dev/null
 grep -F '24.04|26.04' "$ROOT/deploy/client/lib/platform.sh" >/dev/null
+grep -F 'Generic ThinPi clients require Lubuntu 24.04 or 26.04 LTS on amd64' "$ROOT/deploy/client/preflight.sh" >/dev/null
+grep -F 'Raspberry Pi clients require Raspberry Pi OS Lite 64-bit' "$ROOT/deploy/client/provision.sh" >/dev/null
 grep -F 'google-chrome-stable' "$ROOT/deploy/client/provision.sh" >/dev/null
 grep -F 'THINPI_ADMIN_BROWSER' "$ROOT/deploy/client/provision.sh" >/dev/null
 grep -F 'thinpi-browser-policy' "$ROOT/deploy/client/provision.sh" >/dev/null
@@ -66,6 +68,9 @@ grep -F 'ExecStart=/usr/sbin/runuser -u thinpi -- /usr/bin/xinit' "$ROOT/deploy/
 grep -F 'ExecStartPost=/usr/bin/chvt 7' "$ROOT/deploy/client/thinpi-ui-pi.service" >/dev/null
 grep -F 'Environment=THINPI_SHOW_CURSOR=yes' "$ROOT/deploy/client/thinpi-ui-pi.service" >/dev/null
 grep -F 'THINPI_SHOW_CURSOR' "$ROOT/deploy/client/xinitrc" >/dev/null
+grep -F 'xbindkeys -n -f /usr/local/libexec/thinpi-xbindkeysrc' "$ROOT/deploy/client/xinitrc" >/dev/null
+grep -F 'Mod4 + l' "$ROOT/deploy/client/thinpi-xbindkeysrc" >/dev/null
+grep -F 'THINPI_SCREEN_SLEEP_MINUTES' "$ROOT/deploy/client/provision.sh" >/dev/null
 grep -F 'matchbox-window-manager -use_titlebar no &' "$ROOT/deploy/client/xinitrc" >/dev/null
 ! grep -F 'NoNewPrivileges=' "$ROOT/deploy/client/thinpi-ui-pi.service" >/dev/null
 ! grep -F 'PAMName=' "$ROOT/deploy/client/thinpi-ui-pi.service" >/dev/null

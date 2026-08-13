@@ -3,7 +3,9 @@
 package launch
 
 import (
+	"os/exec"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -26,5 +28,16 @@ func TestUserInitiatedRDPLogoffIsSuccessful(t *testing.T) {
 	output := "certificate mismatch warning from connection startup\nERRINFO_LOGOFF_BY_USER (0x0000000C): The disconnection was initiated by the user logging off"
 	if !clientExitedNormally(output) {
 		t.Fatal("user-initiated RDP logoff was classified as a client failure")
+	}
+}
+
+func TestNativeClientCancellationTargetsProcessGroup(t *testing.T) {
+	command := exec.Command("true")
+	configureNativeCommand(command, &syscall.Credential{Uid: 1, Gid: 1}, "/home/thinpi", nil)
+	if command.SysProcAttr == nil || !command.SysProcAttr.Setpgid {
+		t.Fatal("native client was not placed in its own process group")
+	}
+	if command.Cancel == nil {
+		t.Fatal("native client cancellation does not terminate its process group")
 	}
 }

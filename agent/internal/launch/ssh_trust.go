@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -40,11 +39,6 @@ func (e *SSHHostKeyChangedError) Error() string {
 func defaultSSHKnownHostsPath() string {
 	if configured := os.Getenv("THINPI_SSH_KNOWN_HOSTS"); configured != "" {
 		return configured
-	}
-	if runtime.GOOS == "windows" {
-		if root, err := os.UserConfigDir(); err == nil {
-			return filepath.Join(root, "ThinPi", "ssh-known-hosts")
-		}
 	}
 	return "/var/lib/thinpi-agent/ssh-known-hosts"
 }

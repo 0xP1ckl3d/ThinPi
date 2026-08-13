@@ -21,8 +21,6 @@ build.ninja
 Testing/
 
 # Local development state and caches
-/.thinpi-dev/
-/.docker-config/
 .gocache/
 .gomodcache/
 .cache/

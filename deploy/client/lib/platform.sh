@@ -34,7 +34,7 @@ thinpi_load_supported_os() {
       THINPI_OS_FAMILY=ubuntu
       ;;
     *)
-      echo "ThinPi clients require Debian 13, Raspberry Pi OS based on Debian 13, or Ubuntu/Lubuntu 24.04/26.04 LTS; found ${PRETTY_NAME:-unknown}" >&2
+      echo "ThinPi clients require Raspberry Pi OS based on Debian 13 or Lubuntu 24.04/26.04 LTS; found ${PRETTY_NAME:-unknown}" >&2
       return 1
       ;;
   esac
