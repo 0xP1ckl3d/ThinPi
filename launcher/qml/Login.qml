@@ -19,7 +19,7 @@ Rectangle {
         width: Math.min(parent.width - 72, 780)
         spacing: 16
 
-        Image { source: "qrc:/qt/qml/ThinPi/assets/thinpi.svg"; sourceSize.width: 72; sourceSize.height: 72; Layout.alignment: Qt.AlignHCenter }
+        Image { source: "qrc:/ThinPi/assets/thinpi.svg"; sourceSize.width: 72; sourceSize.height: 72; Layout.alignment: Qt.AlignHCenter }
         Label { text: "ThinPi"; color: theme.text; font.pixelSize: 38; font.weight: Font.DemiBold; Layout.alignment: Qt.AlignHCenter }
         Label { text: loginRoot.selectedUsername ? "Welcome back" : "Who's signing in?"; color: theme.muted; font.pixelSize: 17; Layout.alignment: Qt.AlignHCenter; Layout.bottomMargin: 10 }
 

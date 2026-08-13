@@ -75,9 +75,6 @@ func TestMoonlightDirectLaunch(t *testing.T) {
 	if strings.Contains(joined, "--video-decoder hardware") {
 		t.Fatal("Moonlight hardware decoding was forced on an unsupported client")
 	}
-	if !slices.Contains(c.Env, "SDL_AUDIODRIVER=pulseaudio") {
-		t.Fatalf("Moonlight was not configured for the deployed PulseAudio compatibility service: %#v", c.Env)
-	}
 	if strings.Contains(joined, "sunshine-admin") || strings.Contains(joined, "pairing-secret") {
 		t.Fatal("Sunshine administrator credential leaked into Moonlight arguments")
 	}

@@ -6,13 +6,15 @@ xhost - >/dev/null 2>&1 || true
 xset s off
 xset s noblank
 
-# The kiosk is not launched by a desktop session, so ensure its user audio
-# service is available before native clients such as Moonlight request it.
-if command -v systemctl >/dev/null 2>&1 && [ -n "${XDG_RUNTIME_DIR:-}" ]; then
-  systemctl --user start pipewire.socket pipewire-pulse.socket wireplumber.service >/dev/null 2>&1 || true
-fi
-if command -v pulseaudio >/dev/null 2>&1; then
-  pulseaudio --check >/dev/null 2>&1 || pulseaudio --start --exit-idle-time=-1 >/dev/null 2>&1 || true
+# Raspberry Pi OS uses direct ALSA for Moonlight because PulseAudio can reject
+# the KMS HDMI card profile. Lubuntu retains its PipeWire/Pulse user services.
+if ! grep -aq 'Raspberry Pi' /proc/device-tree/model 2>/dev/null; then
+  if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] && [ "${1:-}" != "--session-bus" ] && command -v dbus-run-session >/dev/null 2>&1; then
+    exec dbus-run-session -- "$0" --session-bus
+  fi
+  if command -v systemctl >/dev/null 2>&1 && [ -n "${XDG_RUNTIME_DIR:-}" ]; then
+    systemctl --user start pipewire.socket pipewire-pulse.socket wireplumber.service >/dev/null 2>&1 || true
+  fi
 fi
 
 xbindkeys -n -f /usr/local/libexec/thinpi-xbindkeysrc &

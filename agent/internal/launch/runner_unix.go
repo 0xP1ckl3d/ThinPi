@@ -160,11 +160,23 @@ func configureNativeCommand(cmd *exec.Cmd, credential *syscall.Credential, sessi
 		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 	}
 	runtimeDir := "/run/user/" + strconv.FormatUint(uint64(credential.Uid), 10)
+	audioDriver := nativeAudioDriver()
 	cmd.Env = append(os.Environ(), "HOME="+sessionHome, "USER=thinpi", "LOGNAME=thinpi",
 		"THINPI_SESSION_HOME="+sessionHome, "XDG_RUNTIME_DIR="+runtimeDir,
 		"DBUS_SESSION_BUS_ADDRESS=unix:path="+runtimeDir+"/bus",
-		"PULSE_SERVER=unix:"+runtimeDir+"/pulse/native")
+		"PULSE_SERVER=unix:"+runtimeDir+"/pulse/native", "SDL_AUDIODRIVER="+audioDriver)
 	cmd.Env = append(cmd.Env, environment...)
+}
+
+func nativeAudioDriver() string {
+	if configured := strings.ToLower(strings.TrimSpace(os.Getenv("THINPI_AUDIO_DRIVER"))); configured == "alsa" || configured == "pulseaudio" {
+		return configured
+	}
+	model, _ := os.ReadFile("/proc/device-tree/model")
+	if bytes.Contains(model, []byte("Raspberry Pi")) {
+		return "alsa"
+	}
+	return "pulseaudio"
 }
 
 func clientExitedNormally(output string) bool {

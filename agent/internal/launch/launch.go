@@ -845,7 +845,6 @@ func MoonlightCommand(binary string, x api.Manifest) (Command, error) {
 	return Command{
 		Path: binary,
 		Args: args,
-		Env:  []string{"SDL_AUDIODRIVER=pulseaudio"},
 		MoonlightPairing: &MoonlightPairing{
 			Host: x.Host, Username: x.Username, Password: x.Password,
 			SunshineAPIPort: cfg.SunshineAPIPort, ClientName: cfg.PairingName,
@@ -893,9 +892,22 @@ func Detect(configured string, candidates []string) ClientInfo {
 func probe(path string) ClientInfo {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, path, "--version").CombinedOutput()
+	runtimeDir, runtimeErr := os.MkdirTemp("", "thinpi-probe-runtime-")
+	if runtimeErr == nil {
+		defer os.RemoveAll(runtimeDir)
+		_ = os.Chmod(runtimeDir, 0700)
+	}
+	probeCommand := func(argument string) ([]byte, error) {
+		command := exec.CommandContext(ctx, path, argument)
+		if runtimeErr == nil {
+			command.Env = append(os.Environ(), "XDG_RUNTIME_DIR="+runtimeDir,
+				"QT_QPA_PLATFORM=offscreen")
+		}
+		return command.CombinedOutput()
+	}
+	out, err := probeCommand("--version")
 	if err != nil || len(out) == 0 {
-		out, _ = exec.CommandContext(ctx, path, "/version").CombinedOutput()
+		out, _ = probeCommand("/version")
 	}
 	line, _ := bufio.NewReader(strings.NewReader(string(out))).ReadString('\n')
 	return ClientInfo{Available: true, Binary: path, Version: strings.TrimSpace(line)}
