@@ -21,9 +21,10 @@ type Server struct {
 	Maintenance      Maintenance
 }
 type request struct {
-	Action string `json:"action"`
-	Ticket string `json:"ticket,omitempty"`
-	Accept bool   `json:"accept,omitempty"`
+	Action    string `json:"action"`
+	Ticket    string `json:"ticket,omitempty"`
+	SessionID string `json:"session_id,omitempty"`
+	Accept    bool   `json:"accept,omitempty"`
 }
 
 func (s *Server) Serve(l net.Listener) error {
@@ -51,39 +52,43 @@ func (s *Server) handle(c net.Conn) {
 		}
 		id, err := s.Manager.Launch(q.Ticket)
 		if err != nil {
-			write(c, map[string]any{"accepted": false, "error": "A remote session is already active."})
+			write(c, map[string]any{"accepted": false, "error": "The remote session could not be started."})
 			return
 		}
 		write(c, map[string]any{"accepted": true, "session_id": id})
 	case "status":
 		write(c, map[string]any{"status": s.Manager.Status(), "device_identifier": s.DeviceIdentifier})
 	case "cancel":
-		if err := s.Manager.Cancel(); err != nil {
+		if err := s.Manager.Cancel(q.SessionID); err != nil {
 			write(c, map[string]any{"accepted": false, "error": "No remote session is active."})
 			return
 		}
 		write(c, map[string]any{"accepted": true})
 	case "minimize":
-		if err := s.Manager.Minimize(); err != nil {
+		if err := s.Manager.Minimize(q.SessionID); err != nil {
 			write(c, map[string]any{"accepted": false, "error": "No visible remote session is active."})
 			return
 		}
 		write(c, map[string]any{"accepted": true})
 	case "resume":
-		if err := s.Manager.Resume(); err != nil {
+		if err := s.Manager.Resume(q.SessionID); err != nil {
 			write(c, map[string]any{"accepted": false, "error": "The minimized remote session is no longer available."})
 			return
 		}
 		write(c, map[string]any{"accepted": true})
 	case "resolve_ssh_host_key":
-		if err := s.Manager.ResolveSSHHostKeyChange(q.Accept); err != nil {
+		if err := s.Manager.ResolveSSHHostKeyChange(q.SessionID, q.Accept); err != nil {
 			write(c, map[string]any{"accepted": false, "error": "No SSH host-key change is awaiting confirmation."})
 			return
 		}
 		write(c, map[string]any{"accepted": true})
 	case "maintenance":
-		if q.Ticket == "" || s.Maintenance == nil || s.Manager.Status().State != launch.Idle {
+		if q.Ticket == "" || s.Maintenance == nil {
 			write(c, map[string]any{"accepted": false, "error": "Local maintenance is unavailable."})
+			return
+		}
+		if s.Manager.HasSessions() {
+			write(c, map[string]any{"accepted": false, "error": "Close all remote connections before opening local maintenance."})
 			return
 		}
 		if err := s.Maintenance.Open(q.Ticket); err != nil {

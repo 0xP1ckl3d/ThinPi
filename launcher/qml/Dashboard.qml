@@ -45,7 +45,7 @@ Rectangle {
             cellHeight: 190
             clip: true
             model: backend.connections
-            delegate: ConnectionTile { width: 288; height: 168; title: connectionName; subtitle: description; badge: protocol; minimized: backend.sessionMinimized && connectionId === backend.activeConnectionID; onActivated: backend.launch(index) }
+            delegate: ConnectionTile { width: 288; height: 168; title: connectionName; subtitle: description; badge: protocol; sessionState: { backend.sessionRevision; return backend.connectionSessionState(connectionId) } onActivated: backend.launch(index) }
             Label { anchors.centerIn: parent; visible: grid.count===0&&!backend.busy; text: "No remote systems have been assigned to you."; color: "#9fb0c8"; font.pixelSize: 18 }
         }
         BusyIndicator { running: backend.busy; visible: running; Layout.alignment: Qt.AlignHCenter }
@@ -88,8 +88,8 @@ Rectangle {
         contentItem: ColumnLayout {
             spacing: 16
             Label { text: "Open local maintenance console?"; color: "#f4f8ff"; font.pixelSize: 24; font.weight: Font.DemiBold }
-            Label { Layout.fillWidth: true; text: "The ThinPi app will sign out and switch to this device's administrator console.\nType exit when maintenance is complete to return to the locked launcher."; color: "#c8d6e8"; wrapMode: Text.Wrap }
-            RowLayout { Layout.alignment: Qt.AlignRight; ThinButton { text: "Cancel"; onClicked: maintenanceConfirm.close() } ThinButton { text: "Open console"; variant: "primary"; onClicked: { maintenanceConfirm.close(); backend.openMaintenance() } } }
+            Label { Layout.fillWidth: true; text: backend.hasOpenSessions ? "Proceeding will close all open remote connections, sign you out of ThinPi, and open the local administrator console. Unsaved remote work may be lost.\n\nAre you sure you wish to proceed?" : "The ThinPi app will sign you out and switch to this device's administrator console.\nType exit when maintenance is complete to return to the locked launcher."; color: "#c8d6e8"; wrapMode: Text.Wrap }
+            RowLayout { Layout.alignment: Qt.AlignRight; ThinButton { text: "Cancel"; onClicked: maintenanceConfirm.close() } ThinButton { text: backend.hasOpenSessions ? "Close connections and continue" : "Open console"; variant: backend.hasOpenSessions ? "danger" : "primary"; onClicked: { maintenanceConfirm.close(); backend.openMaintenance() } } }
         }
     }
 }

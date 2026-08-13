@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -38,16 +39,25 @@ type ClientInfo struct {
 	Version   string `json:"version,omitempty"`
 }
 type Status struct {
-	State               State         `json:"state"`
-	ActiveSession       *string       `json:"active_session"`
-	Minimized           bool          `json:"minimized"`
-	ControllerReachable bool          `json:"controller_reachable"`
-	FreeRDP             ClientInfo    `json:"freerdp"`
-	Moonlight           ClientInfo    `json:"moonlight"`
-	VNC                 ClientInfo    `json:"vnc"`
-	SSH                 ClientInfo    `json:"ssh"`
-	LastError           string        `json:"last_error,omitempty"`
-	Confirmation        *Confirmation `json:"confirmation,omitempty"`
+	State               State           `json:"state"`
+	ActiveSession       *string         `json:"active_session"`
+	Minimized           bool            `json:"minimized"`
+	ControllerReachable bool            `json:"controller_reachable"`
+	FreeRDP             ClientInfo      `json:"freerdp"`
+	Moonlight           ClientInfo      `json:"moonlight"`
+	VNC                 ClientInfo      `json:"vnc"`
+	SSH                 ClientInfo      `json:"ssh"`
+	LastError           string          `json:"last_error,omitempty"`
+	Confirmation        *Confirmation   `json:"confirmation,omitempty"`
+	Sessions            []SessionStatus `json:"sessions"`
+}
+type SessionStatus struct {
+	ID           string        `json:"id"`
+	ConnectionID int64         `json:"connection_id,omitempty"`
+	State        State         `json:"state"`
+	Minimized    bool          `json:"minimized"`
+	LastError    string        `json:"last_error,omitempty"`
+	Confirmation *Confirmation `json:"confirmation,omitempty"`
 }
 type Confirmation struct {
 	Kind        string `json:"kind"`
@@ -68,6 +78,7 @@ type Command struct {
 	Env              []string
 	Files            []FileInput
 	MoonlightPairing *MoonlightPairing
+	OnStarted        func(int)
 }
 
 type MoonlightPairing struct {
@@ -94,7 +105,7 @@ type Runner interface {
 }
 
 type WindowController interface {
-	Minimize() (string, error)
+	Minimize(int) (string, error)
 	Resume(string) error
 }
 
@@ -166,7 +177,13 @@ func (ExecRunner) Run(ctx context.Context, c Command) error {
 	if len(c.Env) > 0 {
 		cmd.Env = append(os.Environ(), c.Env...)
 	}
-	return cmd.Run()
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	if c.OnStarted != nil {
+		c.OnStarted(cmd.Process.Pid)
+	}
+	return cmd.Wait()
 }
 
 type Manager struct {
@@ -176,17 +193,25 @@ type Manager struct {
 	runner       Runner
 	mock         bool
 	mockDuration time.Duration
-	cancel       context.CancelFunc
 	log          *slog.Logger
 	clients      Clients
 	sshTrust     *SSHTrustStore
-	pendingSSH   *PendingSSHHostKey
+	sshMu        sync.Mutex
 	windows      WindowController
-	windowID     string
+	sessions     map[string]*managedSession
+	nextSession  uint64
+}
+
+type managedSession struct {
+	status      SessionStatus
+	cancel      context.CancelFunc
+	pid         int
+	windowState string
+	pendingSSH  *PendingSSHHostKey
 }
 
 func NewManager(c Controller, r Runner, mock bool, d time.Duration, clients Clients) *Manager {
-	return &Manager{controller: c, runner: r, mock: mock, mockDuration: d, clients: clients, sshTrust: NewSSHTrustStore(defaultSSHKnownHostsPath()), status: Status{State: Idle, ControllerReachable: true, FreeRDP: clients.FreeRDP, Moonlight: clients.Moonlight, VNC: clients.VNC, SSH: clients.SSH}, log: slog.New(slog.NewTextHandler(io.Discard, nil)), windows: newWindowController()}
+	return &Manager{controller: c, runner: r, mock: mock, mockDuration: d, clients: clients, sshTrust: NewSSHTrustStore(defaultSSHKnownHostsPath()), status: Status{State: Idle, ControllerReachable: true, FreeRDP: clients.FreeRDP, Moonlight: clients.Moonlight, VNC: clients.VNC, SSH: clients.SSH}, log: slog.New(slog.NewTextHandler(io.Discard, nil)), windows: newWindowController(), sessions: make(map[string]*managedSession)}
 }
 
 func (m *Manager) SetLogger(log *slog.Logger) {
@@ -194,74 +219,104 @@ func (m *Manager) SetLogger(log *slog.Logger) {
 		m.log = log
 	}
 }
-func (m *Manager) Status() Status { m.mu.Lock(); defer m.mu.Unlock(); return m.status }
-func (m *Manager) set(state State, id *string, err error) {
+func (m *Manager) Status() Status {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.status.State = state
-	m.status.ActiveSession = id
-	if state != Active {
-		m.status.Minimized = false
-		m.windowID = ""
+	status := m.status
+	status.Sessions = make([]SessionStatus, 0, len(m.sessions))
+	status.State = Idle
+	status.ActiveSession = nil
+	status.Minimized = false
+	status.LastError = ""
+	status.Confirmation = nil
+	for _, session := range m.sessions {
+		status.Sessions = append(status.Sessions, session.status)
+		if status.State == Idle || session.status.State == Active {
+			copyID := session.status.ID
+			status.State = session.status.State
+			status.ActiveSession = &copyID
+			status.Minimized = session.status.Minimized
+			status.LastError = session.status.LastError
+			status.Confirmation = session.status.Confirmation
+		}
 	}
+	sort.Slice(status.Sessions, func(i, j int) bool {
+		return status.Sessions[i].ID < status.Sessions[j].ID
+	})
+	return status
+}
+
+func (m *Manager) HasSessions() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.sessions) != 0
+}
+
+func (m *Manager) setSession(id string, state State, err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	session := m.sessions[id]
+	if session == nil {
+		return
+	}
+	session.status.State = state
 	if err != nil {
-		m.status.LastError = err.Error()
-	} else if state == Idle {
-		m.status.LastError = ""
-		m.status.Confirmation = nil
+		session.status.LastError = err.Error()
 	}
 }
-func (m *Manager) Launch(ticket string) (string, error) {
+
+func (m *Manager) removeSession(id string) {
 	m.mu.Lock()
-	if m.status.State != Idle {
-		m.mu.Unlock()
-		return "", errors.New("another interactive session is already active")
-	}
-	id := fmt.Sprintf("%d", time.Now().UnixNano())
-	m.status.State = Redeeming
-	m.status.ActiveSession = &id
-	m.status.LastError = ""
-	m.status.Confirmation = nil
-	m.pendingSSH = nil
+	delete(m.sessions, id)
 	m.mu.Unlock()
+}
+
+func (m *Manager) Launch(ticket string) (string, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.mu.Lock()
-	m.cancel = cancel
+	m.nextSession++
+	id := fmt.Sprintf("%d-%d", time.Now().UnixNano(), m.nextSession)
+	m.sessions[id] = &managedSession{status: SessionStatus{ID: id, State: Redeeming}, cancel: cancel}
 	m.mu.Unlock()
 	go m.run(ctx, id, ticket)
 	return id, nil
 }
 func (m *Manager) run(ctx context.Context, id, ticket string) {
-	defer func() { m.mu.Lock(); m.cancel = nil; m.mu.Unlock() }()
 	manifest, err := m.controller.Redeem(ctx, ticket)
 	if err != nil {
 		m.mu.Lock()
 		m.status.ControllerReachable = false
 		m.mu.Unlock()
-		m.set(Failed, nil, errors.New("The controller rejected this launch. Refresh your connections and try again."))
-		time.AfterFunc(2*time.Second, func() { m.set(Idle, nil, nil) })
+		m.setSession(id, Failed, errors.New("The controller rejected this launch. Refresh your connections and try again."))
+		time.AfterFunc(2*time.Second, func() { m.removeSession(id) })
 		return
 	}
 	m.mu.Lock()
 	m.status.ControllerReachable = true
+	if session := m.sessions[id]; session != nil {
+		session.status.ConnectionID = manifest.ConnectionID
+	}
 	m.mu.Unlock()
-	m.set(Preparing, &id, nil)
+	m.setSession(id, Preparing, nil)
 	m.log.Info("launch manifest redeemed", "connection_id", manifest.ConnectionID, "protocol", manifest.Protocol)
 	var cmd Command
 	if m.mock {
 		cmd = MockCommand(m.mockDuration)
 	} else {
 		if manifest.Protocol == "ssh" {
+			m.sshMu.Lock()
 			pending, trustErr := m.sshTrust.Prepare(ctx, manifest.Host, manifest.Port)
+			m.sshMu.Unlock()
 			if trustErr != nil {
 				var changed *SSHHostKeyChangedError
 				if errors.As(trustErr, &changed) {
 					m.mu.Lock()
-					m.pendingSSH = pending
-					m.status.State = Failed
-					m.status.ActiveSession = nil
-					m.status.LastError = changed.Error()
-					m.status.Confirmation = &Confirmation{Kind: "ssh_host_key_changed", Message: changed.Error(), Host: changed.Host, Port: changed.Port, Fingerprint: changed.Fingerprint}
+					if session := m.sessions[id]; session != nil {
+						session.pendingSSH = pending
+						session.status.State = Failed
+						session.status.LastError = changed.Error()
+						session.status.Confirmation = &Confirmation{Kind: "ssh_host_key_changed", Message: changed.Error(), Host: changed.Host, Port: changed.Port, Fingerprint: changed.Fingerprint}
+					}
 					m.mu.Unlock()
 					_ = m.controller.SessionEvent(ctx, manifest.TicketID, manifest.ConnectionID, "session_failed", "ssh_host_key_changed", map[string]string{"fingerprint": changed.Fingerprint})
 					return
@@ -274,14 +329,21 @@ func (m *Manager) run(ctx context.Context, id, ticket string) {
 		}
 	}
 	if err != nil {
-		m.set(Failed, nil, clientPreparationError(err))
+		m.setSession(id, Failed, clientPreparationError(err))
 		_ = m.controller.SessionEvent(ctx, manifest.TicketID, manifest.ConnectionID, "session_failed", "client_unavailable", nil)
-		time.AfterFunc(2*time.Second, func() { m.set(Idle, nil, nil) })
+		time.AfterFunc(2*time.Second, func() { m.removeSession(id) })
 		return
 	}
-	m.set(Starting, &id, nil)
+	cmd.OnStarted = func(pid int) {
+		m.mu.Lock()
+		if session := m.sessions[id]; session != nil {
+			session.pid = pid
+		}
+		m.mu.Unlock()
+	}
+	m.setSession(id, Starting, nil)
 	_ = m.controller.SessionEvent(ctx, manifest.TicketID, manifest.ConnectionID, "session_started", "success", map[string]string{"protocol": manifest.Protocol})
-	m.set(Active, &id, nil)
+	m.setSession(id, Active, nil)
 	m.log.Info("native client active", "connection_id", manifest.ConnectionID, "protocol", manifest.Protocol)
 	runCtx := ctx
 	var timeoutCancel context.CancelFunc
@@ -299,8 +361,8 @@ func (m *Manager) run(ctx context.Context, id, ticket string) {
 	_ = m.controller.SessionEvent(context.Background(), manifest.TicketID, manifest.ConnectionID, "session_exited", result, map[string]any{"error": err != nil})
 	m.log.Info("native client exited", "connection_id", manifest.ConnectionID, "protocol", manifest.Protocol, "result", result)
 	if errors.Is(runCtx.Err(), context.DeadlineExceeded) {
-		m.set(Failed, nil, errors.New("This session reached its administrator-set time limit."))
-		time.AfterFunc(2*time.Second, func() { m.set(Idle, nil, nil) })
+		m.setSession(id, Failed, errors.New("This session reached its administrator-set time limit."))
+		time.AfterFunc(2*time.Second, func() { m.removeSession(id) })
 		return
 	}
 	if err != nil && !errors.Is(ctx.Err(), context.Canceled) {
@@ -311,34 +373,36 @@ func (m *Manager) run(ctx context.Context, id, ticket string) {
 			m.log.Warn("native client diagnostic", "connection_id", manifest.ConnectionID, "diagnostic", runtimeError.Diagnostic)
 		}
 		m.log.Warn("native client failure", "connection_id", manifest.ConnectionID, "detail", failure.Error())
-		m.set(Failed, nil, failure)
-		time.AfterFunc(2*time.Second, func() { m.set(Idle, nil, nil) })
+		m.setSession(id, Failed, failure)
+		time.AfterFunc(2*time.Second, func() { m.removeSession(id) })
 		return
 	}
-	m.set(Stopping, &id, nil)
-	m.set(Idle, nil, nil)
+	m.setSession(id, Stopping, nil)
+	m.removeSession(id)
 }
 
-func (m *Manager) ResolveSSHHostKeyChange(accept bool) error {
+func (m *Manager) ResolveSSHHostKeyChange(id string, accept bool) error {
 	m.mu.Lock()
-	pending := m.pendingSSH
-	confirmation := m.status.Confirmation
+	session := m.sessions[id]
+	var pending *PendingSSHHostKey
+	var confirmation *Confirmation
+	if session != nil {
+		pending = session.pendingSSH
+		confirmation = session.status.Confirmation
+	}
 	m.mu.Unlock()
 	if pending == nil || confirmation == nil || confirmation.Kind != "ssh_host_key_changed" {
 		return errors.New("no SSH host-key change is awaiting confirmation")
 	}
 	if accept {
+		m.sshMu.Lock()
 		if err := m.sshTrust.Accept(pending); err != nil {
+			m.sshMu.Unlock()
 			return err
 		}
+		m.sshMu.Unlock()
 	}
-	m.mu.Lock()
-	m.pendingSSH = nil
-	m.status.State = Idle
-	m.status.ActiveSession = nil
-	m.status.LastError = ""
-	m.status.Confirmation = nil
-	m.mu.Unlock()
+	m.removeSession(id)
 	return nil
 }
 func clientPreparationError(err error) error {
@@ -383,56 +447,80 @@ func (m *Manager) commandFor(x api.Manifest) (Command, error) {
 		return Command{}, errors.New("unsupported protocol")
 	}
 }
-func (m *Manager) Cancel() error {
+func (m *Manager) Cancel(id string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.cancel == nil {
+	if id == "" {
+		if len(m.sessions) == 0 {
+			return errors.New("no active session")
+		}
+		for _, session := range m.sessions {
+			session.status.State = Stopping
+			session.cancel()
+		}
+		return nil
+	}
+	session := m.sessions[id]
+	if session == nil {
 		return errors.New("no active session")
 	}
-	m.status.State = Stopping
-	m.cancel()
+	session.status.State = Stopping
+	session.cancel()
 	return nil
 }
 
-func (m *Manager) Minimize() error {
+func (m *Manager) Minimize(id string) error {
 	m.mu.Lock()
-	if m.status.State != Active || m.status.Minimized {
+	session := m.sessions[id]
+	if session == nil || session.status.State != Active || session.status.Minimized {
 		m.mu.Unlock()
 		return errors.New("no visible active session")
 	}
-	windows := m.windows
+	windows, pid, mock := m.windows, session.pid, m.mock
 	m.mu.Unlock()
-	windowID, err := windows.Minimize()
-	if err != nil {
-		return err
+	windowState := "mock"
+	if !mock {
+		if pid == 0 {
+			return errors.New("remote window is not ready")
+		}
+		var err error
+		windowState, err = windows.Minimize(pid)
+		if err != nil {
+			return err
+		}
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.status.State != Active {
+	session = m.sessions[id]
+	if session == nil || session.status.State != Active {
 		return errors.New("session ended while it was being minimized")
 	}
-	m.windowID = windowID
-	m.status.Minimized = true
+	session.windowState = windowState
+	session.status.Minimized = true
 	return nil
 }
 
-func (m *Manager) Resume() error {
+func (m *Manager) Resume(id string) error {
 	m.mu.Lock()
-	if m.status.State != Active || !m.status.Minimized || m.windowID == "" {
+	session := m.sessions[id]
+	if session == nil || session.status.State != Active || !session.status.Minimized || session.windowState == "" {
 		m.mu.Unlock()
 		return errors.New("no minimized session")
 	}
-	windows, windowID := m.windows, m.windowID
+	windows, windowState, mock := m.windows, session.windowState, m.mock
 	m.mu.Unlock()
-	if err := windows.Resume(windowID); err != nil {
-		return err
+	if !mock {
+		if err := windows.Resume(windowState); err != nil {
+			return err
+		}
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.status.State != Active {
+	session = m.sessions[id]
+	if session == nil || session.status.State != Active {
 		return errors.New("session ended while it was being restored")
 	}
-	m.status.Minimized = false
+	session.status.Minimized = false
 	return nil
 }
 

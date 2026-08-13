@@ -2,6 +2,7 @@
 
 #include "connectionmodel.h"
 #include <QJsonObject>
+#include <QHash>
 #include <QNetworkAccessManager>
 #include <QObject>
 #include <QTimer>
@@ -29,6 +30,10 @@ class Backend final : public QObject {
                  sessionMinimizedChanged)
   Q_PROPERTY(qint64 activeConnectionID READ activeConnectionID NOTIFY
                  activeConnectionIDChanged)
+  Q_PROPERTY(int sessionRevision READ sessionRevision NOTIFY sessionsChanged)
+  Q_PROPERTY(bool hasOpenSessions READ hasOpenSessions NOTIFY sessionsChanged)
+  Q_PROPERTY(bool currentSessionVisible READ currentSessionVisible NOTIFY
+                 sessionsChanged)
   Q_PROPERTY(bool sshHostKeyConfirmation READ sshHostKeyConfirmation NOTIFY
                  sshHostKeyConfirmationChanged)
   Q_PROPERTY(QString clientTheme READ clientTheme NOTIFY clientThemeChanged)
@@ -53,6 +58,9 @@ public:
   bool sessionActive() const { return m_sessionActive; }
   bool sessionMinimized() const { return m_sessionMinimized; }
   qint64 activeConnectionID() const { return m_activeConnectionID; }
+  int sessionRevision() const { return m_sessionRevision; }
+  bool hasOpenSessions() const { return !m_sessions.isEmpty(); }
+  bool currentSessionVisible() const;
   bool devMode() const { return m_devMode; }
   bool sshHostKeyConfirmation() const { return m_sshHostKeyConfirmation; }
   ConnectionModel *connections() { return &m_connections; }
@@ -72,6 +80,7 @@ public:
                                  const QString &newPassword);
   Q_INVOKABLE void endSession();
   Q_INVOKABLE void minimizeSession();
+  Q_INVOKABLE QString connectionSessionState(qint64 connectionID) const;
   Q_INVOKABLE void dismissError();
   Q_INVOKABLE void retry();
   Q_INVOKABLE void resolveSSHHostKey(bool accept);
@@ -91,6 +100,7 @@ signals:
   void sessionActiveChanged();
   void sessionMinimizedChanged();
   void activeConnectionIDChanged();
+  void sessionsChanged();
   void sshHostKeyConfirmationChanged();
   void profileUpdated();
   void clientThemeChanged();
@@ -115,6 +125,8 @@ private:
   void setSessionActive(bool active);
   void setSessionMinimized(bool minimized);
   void resumeSession();
+  void beginMaintenance();
+  void waitForMaintenanceIdle(int attemptsRemaining);
   void configureScreenSleep(bool sessionActive);
   void closeAdministrationBrowser();
   void retainClipboard();
@@ -128,11 +140,18 @@ private:
       m_clientTheme = "ocean", m_terminalTheme = "dark", m_profilePhotoUrl,
       m_retainedClipboard;
   qint64 m_activeConnectionID = 0;
+  struct SessionInfo {
+    QString id, state, name, protocol;
+    bool minimized = false;
+  };
+  QHash<qint64, SessionInfo> m_sessions;
+  QString m_sshConfirmationSessionID;
+  int m_sessionRevision = 0;
   QVariantList m_loginUsers;
   int m_idleMinutes = 30;
   int m_screenSleepMinutes = 15;
   bool m_busy = false, m_isAdmin = false, m_devMode = false,
-       m_seenActive = false, m_sessionActive = false, m_sessionExpired = false,
+       m_sessionActive = false, m_sessionExpired = false,
        m_hasMoreUsers = false, m_sshHostKeyConfirmation = false;
   bool m_sessionMinimized = false;
   bool m_updatingClipboard = false;

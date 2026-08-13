@@ -210,28 +210,52 @@ func (r *blockingRunner) Run(ctx context.Context, _ Command) error {
 		return r.err
 	}
 }
-func TestConcurrentLaunchPreventionAndReturnIdle(t *testing.T) {
+
+type concurrentRunner struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (r *concurrentRunner) Run(ctx context.Context, _ Command) error {
+	r.started <- struct{}{}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-r.release:
+		return nil
+	}
+}
+
+func TestConcurrentLaunchesRemainIndependent(t *testing.T) {
 	fc := &fakeController{manifest: api.Manifest{ConnectionID: 1, Protocol: "mock", Host: "mock", Port: 1, Config: json.RawMessage(`{}`)}}
-	runner := &blockingRunner{started: make(chan struct{}), release: make(chan struct{})}
+	runner := &concurrentRunner{started: make(chan struct{}, 2), release: make(chan struct{})}
 	m := NewManager(fc, runner, true, time.Second, Clients{})
-	if _, err := m.Launch("valid"); err != nil {
+	first, err := m.Launch("valid")
+	if err != nil {
 		t.Fatal(err)
 	}
-	select {
-	case <-runner.started:
-	case <-time.After(time.Second):
-		t.Fatal("runner did not start")
+	second, err := m.Launch("second")
+	if err != nil {
+		t.Fatal(err)
 	}
-	if _, err := m.Launch("second"); err == nil {
-		t.Fatal("concurrent launch accepted")
+	for range 2 {
+		select {
+		case <-runner.started:
+		case <-time.After(time.Second):
+			t.Fatal("runner did not start")
+		}
+	}
+	status := m.Status()
+	if len(status.Sessions) != 2 || first == second {
+		t.Fatalf("concurrent sessions not tracked independently: %#v", status.Sessions)
 	}
 	close(runner.release)
 	deadline := time.Now().Add(time.Second)
-	for m.Status().State != Idle && time.Now().Before(deadline) {
+	for m.HasSessions() && time.Now().Before(deadline) {
 		time.Sleep(time.Millisecond)
 	}
-	if m.Status().State != Idle {
-		t.Fatalf("state=%s", m.Status().State)
+	if m.HasSessions() {
+		t.Fatal("completed sessions were not removed")
 	}
 }
 func TestRedeemFailureDoesNotRun(t *testing.T) {
@@ -311,7 +335,10 @@ type fakeWindowController struct {
 	resumed   string
 }
 
-func (f *fakeWindowController) Minimize() (string, error) {
+func (f *fakeWindowController) Minimize(pid int) (string, error) {
+	if pid != 99 {
+		return "", errors.New("wrong process")
+	}
 	f.minimized = "4242"
 	return f.minimized, nil
 }
@@ -325,15 +352,14 @@ func TestManagerMinimizesAndResumesSameActiveWindow(t *testing.T) {
 	windows := &fakeWindowController{}
 	m.windows = windows
 	sessionID := "session-1"
-	m.status.State = Active
-	m.status.ActiveSession = &sessionID
-	if err := m.Minimize(); err != nil {
+	m.sessions[sessionID] = &managedSession{status: SessionStatus{ID: sessionID, State: Active}, pid: 99}
+	if err := m.Minimize(sessionID); err != nil {
 		t.Fatal(err)
 	}
 	if status := m.Status(); !status.Minimized || windows.minimized != "4242" {
 		t.Fatalf("session was not minimized: %#v", status)
 	}
-	if err := m.Resume(); err != nil {
+	if err := m.Resume(sessionID); err != nil {
 		t.Fatal(err)
 	}
 	if status := m.Status(); status.Minimized || windows.resumed != "4242" {

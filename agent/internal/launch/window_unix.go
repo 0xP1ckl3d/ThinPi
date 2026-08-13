@@ -5,6 +5,7 @@ package launch
 import (
 	"errors"
 	"os/exec"
+	"strconv"
 	"strings"
 )
 
@@ -12,42 +13,22 @@ type x11WindowController struct{}
 
 func newWindowController() WindowController { return x11WindowController{} }
 
-func (x11WindowController) Minimize() (string, error) {
+func (x11WindowController) Minimize(pid int) (string, error) {
 	xdotool, err := exec.LookPath("xdotool")
 	if err != nil {
 		return "", errors.New("xdotool is unavailable")
 	}
-	output, err := exec.Command(xdotool, "getactivewindow").Output()
-	activeWindowID := strings.TrimSpace(string(output))
-	if err != nil || activeWindowID == "" {
-		return "", errors.New("active remote window is unavailable")
-	}
-	name, _ := exec.Command(xdotool, "getwindowname", activeWindowID).Output()
-	if strings.TrimSpace(string(name)) == "ThinPi" {
-		return "", errors.New("the launcher cannot be minimized as a remote session")
-	}
-	windowIDs := []string{activeWindowID}
-	if pidOutput, pidErr := exec.Command(xdotool, "getwindowpid", activeWindowID).Output(); pidErr == nil {
-		pid := strings.TrimSpace(string(pidOutput))
-		if pid != "" {
-			if searchOutput, searchErr := exec.Command(xdotool, "search", "--pid", pid).Output(); searchErr == nil {
-				windowIDs = strings.Fields(string(searchOutput))
-			}
-		}
-	}
-	activeIncluded := false
-	for _, windowID := range windowIDs {
-		activeIncluded = activeIncluded || windowID == activeWindowID
-	}
-	if !activeIncluded {
-		windowIDs = append(windowIDs, activeWindowID)
+	output, err := exec.Command(xdotool, "search", "--onlyvisible", "--pid", strconv.Itoa(pid)).Output()
+	windowIDs := strings.Fields(string(output))
+	if err != nil || len(windowIDs) == 0 {
+		return "", errors.New("remote window is unavailable")
 	}
 	for _, windowID := range windowIDs {
 		if err = exec.Command(xdotool, "windowminimize", windowID).Run(); err != nil {
 			return "", errors.New("remote window could not be minimized")
 		}
 	}
-	return activeWindowID + "|" + strings.Join(windowIDs, ","), nil
+	return windowIDs[len(windowIDs)-1] + "|" + strings.Join(windowIDs, ","), nil
 }
 
 func (x11WindowController) Resume(windowState string) error {

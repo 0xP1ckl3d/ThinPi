@@ -123,7 +123,13 @@ func (PlatformRunner) Run(ctx context.Context, c Command) error {
 	// kiosk identity so Xorg, audio, input and Moonlight pairing state work in
 	// the same session as the launcher.
 	configure(cmd)
-	err := cmd.Run()
+	err := cmd.Start()
+	if err == nil && c.OnStarted != nil {
+		c.OnStarted(cmd.Process.Pid)
+	}
+	if err == nil {
+		err = cmd.Wait()
+	}
 	if err != nil && ctx.Err() == nil {
 		diagnostic := redactClientOutput(output.String(), c)
 		if strings.TrimSpace(diagnostic) == "" {

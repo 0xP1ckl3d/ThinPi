@@ -82,6 +82,17 @@ void Backend::setSessionMinimized(bool minimized) {
   m_sessionMinimized = minimized;
   emit sessionMinimizedChanged();
 }
+bool Backend::currentSessionVisible() const {
+  const auto session = m_sessions.constFind(m_activeConnectionID);
+  return session != m_sessions.constEnd() && session->state == "active" &&
+         !session->minimized;
+}
+QString Backend::connectionSessionState(qint64 connectionID) const {
+  const auto session = m_sessions.constFind(connectionID);
+  if (session == m_sessions.constEnd())
+    return {};
+  return session->minimized ? QStringLiteral("minimized") : session->state;
+}
 void Backend::configureScreenSleep(bool sessionActive) {
   if (m_devMode)
     return;
@@ -107,6 +118,9 @@ void Backend::clearLocalSession() {
   m_poll.stop();
   m_idle.stop();
   m_keepalive.stop();
+  m_sessions.clear();
+  ++m_sessionRevision;
+  emit sessionsChanged();
   clearClipboard();
   setSessionActive(false);
   setSessionMinimized(false);
@@ -139,8 +153,9 @@ void Backend::fail(const QString &message, bool offline) {
   m_error = message;
   emit errorMessageChanged();
   setBusy(false);
-  m_keepalive.stop();
-  setSessionActive(false);
+  if (m_sessions.isEmpty())
+    m_keepalive.stop();
+  setSessionActive(!m_sessions.isEmpty());
   setView(offline ? "offline" : (m_token.isEmpty() ? "login" : "dashboard"));
   if (!m_token.isEmpty() && !offline)
     armIdleLock();
@@ -320,6 +335,8 @@ void Backend::refresh() {
     loadConnections();
 }
 void Backend::logout() {
+  if (!m_sessions.isEmpty())
+    agentRequest({{"action", "cancel"}}, [](QJsonObject) {});
   if (!m_token.isEmpty()) {
     QNetworkRequest request(QUrl(m_apiUrl + "/api/v1/auth/logout"));
     request.setHeader(QNetworkRequest::ContentTypeHeader, "application/json");
@@ -333,7 +350,6 @@ void Backend::logout() {
   dismissError();
 }
 void Backend::lockKiosk() {
-  agentRequest({{"action", "cancel"}}, [](QJsonObject) {});
   closeAdministrationBrowser();
   logout();
 }
@@ -451,6 +467,41 @@ void Backend::openMaintenance() {
     return;
   dismissError();
   setBusy(true);
+  if (!m_sessions.isEmpty()) {
+    agentRequest({{"action", "cancel"}}, [this](QJsonObject response) {
+      if (!response["accepted"].toBool()) {
+        setBusy(false);
+        fail("Open connections could not be closed for local maintenance.");
+        return;
+      }
+      waitForMaintenanceIdle(40);
+    });
+    return;
+  }
+  beginMaintenance();
+}
+void Backend::waitForMaintenanceIdle(int attemptsRemaining) {
+  agentRequest({{"action", "status"}}, [this, attemptsRemaining](QJsonObject response) {
+    const auto sessions = response["status"].toObject()["sessions"].toArray();
+    if (sessions.isEmpty()) {
+      m_sessions.clear();
+      ++m_sessionRevision;
+      emit sessionsChanged();
+      setSessionActive(false);
+      beginMaintenance();
+      return;
+    }
+    if (attemptsRemaining <= 1) {
+      setBusy(false);
+      fail("Open connections did not close in time for local maintenance.");
+      return;
+    }
+    QTimer::singleShot(250, this, [this, attemptsRemaining]() {
+      waitForMaintenanceIdle(attemptsRemaining - 1);
+    });
+  });
+}
+void Backend::beginMaintenance() {
   controllerRequest(
       "POST", "/api/v1/maintenance",
       {{"device_identifier", m_deviceIdentifier}}, [this](QJsonObject x) {
@@ -459,7 +510,10 @@ void Backend::openMaintenance() {
                      [this](QJsonObject response) {
                        setBusy(false);
                        if (!response["accepted"].toBool()) {
-                         fail("Local maintenance could not be authorised.");
+                         const auto error = response["error"].toString();
+                         fail(error.isEmpty()
+                                  ? "Local maintenance could not be authorised."
+                                  : error);
                          return;
                        }
                        logout();
@@ -493,15 +547,21 @@ void Backend::launch(int row) {
   const auto id = m_connections.idAt(row);
   if (id == 0)
     return;
-  if (m_sessionActive) {
-    if (id == m_activeConnectionID && m_sessionMinimized) {
-      resumeSession();
-      return;
+  const auto existing = m_sessions.constFind(id);
+  if (existing != m_sessions.constEnd()) {
+    if (m_activeConnectionID != id) {
+      m_activeConnectionID = id;
+      emit activeConnectionIDChanged();
+      ++m_sessionRevision;
+      emit sessionsChanged();
     }
-    m_error = id == m_activeConnectionID
-                  ? "This connection is already open."
-                  : "Another connection is still active. Minimise or end it before opening a different connection.";
-    emit errorMessageChanged();
+    m_activeName = existing->name;
+    m_activeProtocol = existing->protocol;
+    m_sessionMessage = m_activeName + " — " + m_activeProtocol;
+    emit sessionMessageChanged();
+    setSessionMinimized(existing->minimized);
+    if (existing->minimized)
+      resumeSession();
     return;
   }
   if (!m_restrictionMessage.isEmpty()) {
@@ -514,26 +574,40 @@ void Backend::launch(int row) {
   }
   m_activeConnectionID = id;
   emit activeConnectionIDChanged();
-  m_seenActive = false;
   m_sessionExpired = false;
   m_idle.stop();
   configureScreenSleep(true);
   m_activeName = m_connections.nameAt(row);
   m_activeProtocol = m_connections.protocolAt(row).toUpper();
+  m_sessions.insert(id, SessionInfo{{}, QStringLiteral("redeeming_ticket"),
+                                    m_activeName, m_activeProtocol, false});
+  ++m_sessionRevision;
+  emit sessionsChanged();
+  setSessionActive(true);
+  setSessionMinimized(false);
   m_sessionMessage = "Connecting to " + m_activeName + QStringLiteral("…");
   emit sessionMessageChanged();
   setBusy(true);
   setView("session");
   controllerRequest(
       "POST", QString("/api/v1/connections/%1/launch").arg(id),
-      {{"device_identifier", m_deviceIdentifier}}, [this](QJsonObject x) {
+      {{"device_identifier", m_deviceIdentifier}}, [this, id](QJsonObject x) {
         agentRequest(
             {{"action", "launch"}, {"ticket", x["ticket"].toString()}},
-            [this](QJsonObject response) {
+            [this, id](QJsonObject response) {
               if (!response["accepted"].toBool()) {
+                m_sessions.remove(id);
+                ++m_sessionRevision;
+                emit sessionsChanged();
+                setSessionActive(!m_sessions.isEmpty());
                 fail("The local ThinPi service could not start the session.");
                 return;
               }
+              auto session = m_sessions.value(id);
+              session.id = response["session_id"].toString();
+              m_sessions.insert(id, session);
+              ++m_sessionRevision;
+              emit sessionsChanged();
               setBusy(false);
               m_poll.start();
               pollAgent();
@@ -576,45 +650,92 @@ void Backend::agentRequest(const QJsonObject &request,
 void Backend::pollAgent() {
   agentRequest({{"action", "status"}}, [this](QJsonObject response) {
     const auto status = response["status"].toObject();
-    const auto state = status["state"].toString();
-    if (state != "idle")
-      m_seenActive = true;
-    if (state == "active") {
+    const auto reported = status["sessions"].toArray();
+    QHash<qint64, SessionInfo> updated;
+    for (const auto &value : reported) {
+      const auto object = value.toObject();
+      const auto sessionID = object["id"].toString();
+      qint64 connectionID = object["connection_id"].toInteger();
+      if (connectionID == 0) {
+        for (auto it = m_sessions.constBegin(); it != m_sessions.constEnd(); ++it) {
+          if (it->id == sessionID) {
+            connectionID = it.key();
+            break;
+          }
+        }
+      }
+      if (connectionID == 0)
+        continue;
+      auto session = m_sessions.value(connectionID);
+      session.id = sessionID;
+      session.state = object["state"].toString();
+      session.minimized = object["minimized"].toBool();
+      if (session.name.isEmpty()) {
+        const auto row = m_connections.indexOfId(connectionID);
+        session.name = m_connections.nameAt(row);
+        session.protocol = m_connections.protocolAt(row).toUpper();
+      }
+      updated.insert(connectionID, session);
+
+      if (session.state == "error") {
+        const auto confirmation = object["confirmation"].toObject();
+        const auto needsConfirmation =
+            confirmation["kind"].toString() == "ssh_host_key_changed";
+        if (needsConfirmation) {
+          m_sshConfirmationSessionID = sessionID;
+          if (!m_sshHostKeyConfirmation) {
+            m_sshHostKeyConfirmation = true;
+            emit sshHostKeyConfirmationChanged();
+          }
+        }
+        if (connectionID == m_activeConnectionID) {
+          const auto detail = object["last_error"].toString();
+          m_error = detail.isEmpty()
+                        ? "Unable to connect to " + session.name + "."
+                        : detail;
+          emit errorMessageChanged();
+          setBusy(false);
+          setView("dashboard");
+        }
+      }
+    }
+    for (auto it = m_sessions.constBegin(); it != m_sessions.constEnd(); ++it) {
+      if (it->id.isEmpty() && !updated.contains(it.key()))
+        updated.insert(it.key(), it.value());
+    }
+    m_sessions = std::move(updated);
+    ++m_sessionRevision;
+    emit sessionsChanged();
+    setSessionActive(!m_sessions.isEmpty());
+
+    const auto current = m_sessions.constFind(m_activeConnectionID);
+    if (current != m_sessions.constEnd()) {
+      m_activeName = current->name;
+      m_activeProtocol = current->protocol;
       m_sessionMessage = m_activeName + " — " + m_activeProtocol;
       emit sessionMessageChanged();
-      setSessionActive(true);
-      const auto minimized = status["minimized"].toBool();
-      setSessionMinimized(minimized);
-      if (minimized && m_view == "session")
+      setSessionMinimized(current->minimized);
+      if (current->minimized && m_view == "session")
         setView("dashboard");
+    } else if (m_activeConnectionID != 0) {
+      m_activeConnectionID = 0;
+      emit activeConnectionIDChanged();
+      setSessionMinimized(false);
+      m_sessionMessage.clear();
+      emit sessionMessageChanged();
+      if (!m_sessionExpired)
+        setView("dashboard");
+    }
+
+    if (!m_sessions.isEmpty()) {
       if (!m_keepalive.isActive()) {
         keepSessionAlive();
         m_keepalive.start();
       }
-    }
-    if (state == "error") {
+    } else {
       m_poll.stop();
-      m_keepalive.stop();
       setSessionActive(false);
       setSessionMinimized(false);
-      const auto confirmation = status["confirmation"].toObject();
-      m_sshHostKeyConfirmation =
-          confirmation["kind"].toString() == "ssh_host_key_changed";
-      emit sshHostKeyConfirmationChanged();
-      const auto detail = status["last_error"].toString();
-      fail(detail.isEmpty() ? "Unable to connect to " + m_activeName + "."
-                            : detail);
-    } else if (state == "idle" && m_seenActive) {
-      m_poll.stop();
-      m_keepalive.stop();
-      setSessionActive(false);
-      setSessionMinimized(false);
-      m_sessionMessage.clear();
-      emit sessionMessageChanged();
-      if (m_activeConnectionID != 0) {
-        m_activeConnectionID = 0;
-        emit activeConnectionIDChanged();
-      }
       if (m_sessionExpired) {
         clearLocalSession();
       } else {
@@ -625,47 +746,83 @@ void Backend::pollAgent() {
   });
 }
 void Backend::endSession() {
-  agentRequest({{"action", "cancel"}}, [](QJsonObject) {});
+  const auto session = m_sessions.constFind(m_activeConnectionID);
+  if (session == m_sessions.constEnd() || session->id.isEmpty())
+    return;
+  agentRequest({{"action", "cancel"}, {"session_id", session->id}},
+               [this](QJsonObject response) {
+                 if (!response["accepted"].toBool()) {
+                   m_error = "The active connection could not be closed.";
+                   emit errorMessageChanged();
+                   return;
+                 }
+                 setView("dashboard");
+               });
 }
 void Backend::minimizeSession() {
-  if (!m_sessionActive || m_sessionMinimized)
+  const auto session = m_sessions.constFind(m_activeConnectionID);
+  if (session == m_sessions.constEnd() || session->id.isEmpty() ||
+      session->minimized || session->state != "active")
     return;
-  agentRequest({{"action", "minimize"}}, [this](QJsonObject response) {
+  agentRequest({{"action", "minimize"}, {"session_id", session->id}},
+               [this](QJsonObject response) {
     if (!response["accepted"].toBool()) {
       m_error = "The active connection could not be minimized.";
       emit errorMessageChanged();
       return;
     }
     setSessionMinimized(true);
+    auto current = m_sessions.value(m_activeConnectionID);
+    current.minimized = true;
+    m_sessions.insert(m_activeConnectionID, current);
+    ++m_sessionRevision;
+    emit sessionsChanged();
     setView("dashboard");
   });
 }
 void Backend::resumeSession() {
-  agentRequest({{"action", "resume"}}, [this](QJsonObject response) {
+  const auto session = m_sessions.constFind(m_activeConnectionID);
+  if (session == m_sessions.constEnd() || session->id.isEmpty())
+    return;
+  agentRequest({{"action", "resume"}, {"session_id", session->id}},
+               [this](QJsonObject response) {
     if (!response["accepted"].toBool()) {
       m_error = "The minimized connection is no longer available.";
       emit errorMessageChanged();
       return;
     }
     setSessionMinimized(false);
+    auto current = m_sessions.value(m_activeConnectionID);
+    current.minimized = false;
+    m_sessions.insert(m_activeConnectionID, current);
+    ++m_sessionRevision;
+    emit sessionsChanged();
     setView("session");
   });
 }
 void Backend::resolveSSHHostKey(bool accept) {
-  agentRequest({{"action", "resolve_ssh_host_key"}, {"accept", accept}},
-               [this, accept](QJsonObject response) {
+  const auto connectionID = m_activeConnectionID;
+  agentRequest({{"action", "resolve_ssh_host_key"},
+                {"session_id", m_sshConfirmationSessionID},
+                {"accept", accept}},
+               [this, accept, connectionID](QJsonObject response) {
                  if (!response["accepted"].toBool()) {
                    fail(
                        "The SSH host-key confirmation is no longer available.");
                    return;
                  }
                  m_sshHostKeyConfirmation = false;
+                 m_sshConfirmationSessionID.clear();
                  emit sshHostKeyConfirmationChanged();
+                 m_sessions.remove(connectionID);
+                 ++m_sessionRevision;
+                 emit sessionsChanged();
+                 setSessionActive(!m_sessions.isEmpty());
                  dismissError();
                  setBusy(false);
                  setView("dashboard");
                  armIdleLock();
                  if (accept)
-                   launch(m_connections.indexOfId(m_activeConnectionID));
+                   launch(m_connections.indexOfId(connectionID));
                });
 }
