@@ -252,8 +252,9 @@ sudo journalctl -b -u thinpi-ui -u thinpi-agent --no-pager
 ```
 
 The launcher checks the controller every minute. RDP and VNC clipboard
-redirection is enforced by ThinPi, while SSH and local maintenance use the Xorg
-text clipboard. Sign-out intentionally clears it. Profile photos must be PNG,
+redirection is enforced by ThinPi, while SSH uses the Xorg text clipboard.
+Sign-out intentionally clears it, including before the kiosk switches to the
+protected local maintenance console. Profile photos must be PNG,
 JPEG or WebP; the admin browser resizes them before upload. If keyboard focus is
 unclear, press Tab: the focused control receives the selected palette's accent
 outline, and Enter or Space activates it.

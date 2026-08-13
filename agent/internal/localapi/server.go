@@ -11,7 +11,7 @@ import (
 )
 
 type Maintenance interface {
-	Open(string, string) error
+	Open(string) error
 }
 
 type Server struct {
@@ -21,10 +21,9 @@ type Server struct {
 	Maintenance      Maintenance
 }
 type request struct {
-	Action        string `json:"action"`
-	Ticket        string `json:"ticket,omitempty"`
-	Accept        bool   `json:"accept,omitempty"`
-	TerminalTheme string `json:"terminal_theme,omitempty"`
+	Action string `json:"action"`
+	Ticket string `json:"ticket,omitempty"`
+	Accept bool   `json:"accept,omitempty"`
 }
 
 func (s *Server) Serve(l net.Listener) error {
@@ -75,7 +74,7 @@ func (s *Server) handle(c net.Conn) {
 			write(c, map[string]any{"accepted": false, "error": "Local maintenance is unavailable."})
 			return
 		}
-		if err := s.Maintenance.Open(q.Ticket, q.TerminalTheme); err != nil {
+		if err := s.Maintenance.Open(q.Ticket); err != nil {
 			write(c, map[string]any{"accepted": false, "error": "Maintenance authorisation was rejected."})
 			return
 		}

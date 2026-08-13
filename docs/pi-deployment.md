@@ -428,12 +428,12 @@ Display sleep and sign-in-screen privacy are controller-managed: open **Kiosk
 settings** in the controller administration application. Clients check for
 changes every minute, and `0` disables display sleep.
 
-The same page controls the client colour palette and dark/light SSH and local
-maintenance shells. Add profile photos from **People**. The client maintains a
-single text clipboard across supported remote clients, the administration
-browser and the mouse-selectable local maintenance shell; signing out clears
-it. Tab/Shift+Tab moves through kiosk controls and Enter or Space activates the
-focused control.
+The same page controls the client colour palette and dark/light SSH shells. Add
+profile photos from **People**. The client maintains a single text clipboard
+across supported remote clients and the administration browser; signing out
+clears it. Local maintenance signs out and switches to the protected
+administrator console on VT2. Tab/Shift+Tab moves through kiosk controls and
+Enter or Space activates the focused control.
 
 Never add `mock_clients`, `THINPI_DEV_MODE`, a user token, a remote password,
 or the device token to the launcher environment.

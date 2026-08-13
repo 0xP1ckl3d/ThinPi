@@ -439,18 +439,19 @@ void Backend::openMaintenance() {
   if (!m_isAdmin || m_token.isEmpty() || m_deviceIdentifier.isEmpty())
     return;
   dismissError();
-  m_idle.stop();
   setBusy(true);
   controllerRequest(
       "POST", "/api/v1/maintenance",
       {{"device_identifier", m_deviceIdentifier}}, [this](QJsonObject x) {
         agentRequest({{"action", "maintenance"},
-                      {"ticket", x["ticket"].toString()},
-                      {"terminal_theme", m_terminalTheme}},
+                      {"ticket", x["ticket"].toString()}},
                      [this](QJsonObject response) {
                        setBusy(false);
-                       if (!response["accepted"].toBool())
+                       if (!response["accepted"].toBool()) {
                          fail("Local maintenance could not be authorised.");
+                         return;
+                       }
+                       logout();
                      });
       });
 }

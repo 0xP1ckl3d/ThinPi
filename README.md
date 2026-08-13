@@ -41,14 +41,15 @@ the kiosk remains running.
 - Administrators can show the most recently used accounts on the sign-in screen
   or require everyone to enter their username manually.
 - **Kiosk settings** also provides Ocean, Graphite, Forest, Sunset and High
-  Contrast client palettes plus dark/light shell appearance. Clients apply
+  Contrast client palettes plus dark/light SSH shell appearance. Clients apply
   palette changes within one minute.
 - Administrators can add or replace each person's profile photo from **People**.
   Photos are resized in the browser and displayed on the kiosk login and
   dashboard screens.
-- The signed-in user has one text clipboard across RDP, VNC, SSH, the controller
-  administration browser and local maintenance shell. It survives changing
-  connections and is cleared at ThinPi sign-out.
+- The signed-in user has one text clipboard across RDP, VNC, SSH and the
+  controller administration browser. It survives changing connections and is
+  cleared at ThinPi sign-out. Local maintenance signs out and switches to its
+  protected administrator console.
 - Moonlight can type client clipboard text into its host with its
   Ctrl+Alt+Shift+V shortcut, but the upstream GameStream protocol cannot copy
   host clipboard content back to ThinPi.

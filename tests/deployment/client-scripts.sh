@@ -38,8 +38,7 @@ grep -F 'certutil -A' "$ROOT/deploy/client/browser-policy.sh" >/dev/null
 grep -F 'CA_IMPORT_FILE=$(mktemp)' "$ROOT/deploy/client/browser-policy.sh" >/dev/null
 grep -F "CONTROLLER_URL=\$(sudo sed" "$ROOT/deploy/client/stage.sh" >/dev/null
 grep -F 'xhost +SI:localuser:thinpi' "$ROOT/deploy/client/xinitrc" >/dev/null
-grep -F 'Requires=thinpi-ui.service' "$ROOT/deploy/client/thinpi-maintenance@.service" >/dev/null
-grep -F 'XTerm*selectToClipboard: true' "$ROOT/deploy/client/maintenance-session.sh" >/dev/null
+grep -F 'TTYPath=/dev/tty2' "$ROOT/deploy/client/thinpi-maintenance@.service" >/dev/null
 grep -F 'pipewire-audio pipewire-alsa pipewire-pulse' "$ROOT/deploy/client/provision.sh" >/dev/null
 grep -F 'bash /tmp/moonlight-repo.sh' "$ROOT/deploy/client/provision.sh" >/dev/null
 grep -F 'install_moonlight_appimage_amd64' "$ROOT/deploy/client/provision.sh" >/dev/null

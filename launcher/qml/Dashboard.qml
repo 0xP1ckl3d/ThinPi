@@ -88,7 +88,7 @@ Rectangle {
         contentItem: ColumnLayout {
             spacing: 16
             Label { text: "Open local maintenance console?"; color: "#f4f8ff"; font.pixelSize: 24; font.weight: Font.DemiBold }
-            Label { Layout.fillWidth: true; text: "A full-screen shell will open as this device's administrator. Clipboard contents remain available until you sign out of ThinPi.\nType exit when maintenance is complete to return to the dashboard."; color: "#c8d6e8"; wrapMode: Text.Wrap }
+            Label { Layout.fillWidth: true; text: "The ThinPi app will sign out and switch to this device's administrator console.\nType exit when maintenance is complete to return to the locked launcher."; color: "#c8d6e8"; wrapMode: Text.Wrap }
             RowLayout { Layout.alignment: Qt.AlignRight; ThinButton { text: "Cancel"; onClicked: maintenanceConfirm.close() } ThinButton { text: "Open console"; variant: "primary"; onClicked: { maintenanceConfirm.close(); backend.openMaintenance() } } }
         }
     }

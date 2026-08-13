@@ -12,19 +12,18 @@ SHELL_VALUE=$(printf '%s\n' "$ENTRY" | cut -d: -f7)
 [ "$UID_VALUE" -ge 1000 ] || exit 1
 case "$SHELL_VALUE" in */nologin|*/false|"") exit 1 ;; esac
 
-THEME=$(cat /run/thinpi/maintenance-theme 2>/dev/null || printf dark)
-case "$THEME" in
-  light) FOREGROUND='#172033'; BACKGROUND='#f4f6fa' ;;
-  dark) FOREGROUND='#e8edf4'; BACKGROUND='#07111e' ;;
-  *) exit 1 ;;
-esac
+return_to_kiosk() {
+  clear 2>/dev/null || true
+  chvt 7 2>/dev/null || true
+}
+trap return_to_kiosk EXIT INT TERM HUP
 
-exec /usr/bin/xterm \
-  -title 'ThinPi local maintenance' \
-  -fullscreen \
-  -xrm 'XTerm*selectToClipboard: true' \
-  -xrm "XTerm*foreground: $FOREGROUND" \
-  -xrm "XTerm*background: $BACKGROUND" \
-  -xrm 'XTerm*scrollBar: false' \
-  -xrm 'XTerm*toolBar: false' \
-  -e "$SHELL_VALUE" -l
+clear
+printf '%s\n' \
+  'ThinPi local maintenance' \
+  '========================' \
+  "Controller administrator access authorised for OS account: $USER_NAME" \
+  'This is the local ThinPi appliance, not a remote SSH connection.' \
+  'Run exit when finished. The kiosk will return to its locked login screen.' \
+  ''
+/usr/sbin/runuser --login "$USER_NAME"

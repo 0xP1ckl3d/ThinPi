@@ -22,10 +22,10 @@ type runner struct{}
 
 func (runner) Run(context.Context, launch.Command) error { return nil }
 
-type maintenanceRecorder struct{ ticket, theme string }
+type maintenanceRecorder struct{ ticket string }
 
-func (m *maintenanceRecorder) Open(ticket, theme string) error {
-	m.ticket, m.theme = ticket, theme
+func (m *maintenanceRecorder) Open(ticket string) error {
+	m.ticket = ticket
 	return nil
 }
 func TestStatusDoesNotExposeCredential(t *testing.T) {
@@ -69,13 +69,13 @@ func TestMaintenanceActionRequiresTicketAndFixedBroker(t *testing.T) {
 	s := &Server{Manager: m, DeviceIdentifier: "pi-1", Maintenance: recorder}
 	a, b := net.Pipe()
 	go s.handle(a)
-	_ = json.NewEncoder(b).Encode(map[string]string{"action": "maintenance", "ticket": "one-use-ticket", "terminal_theme": "dark"})
+	_ = json.NewEncoder(b).Encode(map[string]string{"action": "maintenance", "ticket": "one-use-ticket"})
 	var out map[string]any
 	if err := json.NewDecoder(b).Decode(&out); err != nil {
 		t.Fatal(err)
 	}
 	b.Close()
-	if out["accepted"] != true || recorder.ticket != "one-use-ticket" || recorder.theme != "dark" {
+	if out["accepted"] != true || recorder.ticket != "one-use-ticket" {
 		t.Fatalf("maintenance not brokered: %#v ticket=%q", out, recorder.ticket)
 	}
 }
