@@ -14,7 +14,7 @@ OUT="$ROOT/bin/packages"; mkdir -p "$OUT"
 for package in agent launcher; do
   STAGE=$(mktemp -d)
   mkdir -p "$STAGE/DEBIAN" "$STAGE/usr/bin"
-  if [ "$package" = agent ]; then BIN="$ROOT/bin/$ARCH/thinpi-agent"; NAME=thinpi-agent; DESC="ThinPi secure native-client agent"; DEPENDS="ca-certificates"; else BIN="$ROOT/build/launcher-$ARCH/thinpi-launcher"; NAME=thinpi-launcher; DESC="ThinPi Qt kiosk launcher"; DEPENDS="jq, libnss3-tools, libqt6core6t64 | libqt6core6, libqt6gui6, libqt6network6, libqt6qml6, libqt6quick6, libqt6quickcontrols2-6, qml6-module-qtquick, qml6-module-qtquick-controls, qml6-module-qtquick-layouts, qml6-module-qtquick-window, xinit, matchbox-window-manager"; fi
+  if [ "$package" = agent ]; then BIN="$ROOT/bin/$ARCH/thinpi-agent"; NAME=thinpi-agent; DESC="ThinPi secure native-client agent"; DEPENDS="ca-certificates, procps"; else BIN="$ROOT/build/launcher-$ARCH/thinpi-launcher"; NAME=thinpi-launcher; DESC="ThinPi Qt kiosk launcher"; DEPENDS="jq, libnss3-tools, libqt6core6t64 | libqt6core6, libqt6gui6, libqt6network6, libqt6qml6, libqt6quick6, libqt6quickcontrols2-6, qml6-module-qtquick, qml6-module-qtquick-controls, qml6-module-qtquick-layouts, qml6-module-qtquick-window, xinit, matchbox-window-manager"; fi
   install -m 0755 "$BIN" "$STAGE/usr/bin/$NAME"
   if [ "$package" = agent ]; then
     mkdir -p "$STAGE/lib/systemd/system" "$STAGE/usr/share/thinpi"

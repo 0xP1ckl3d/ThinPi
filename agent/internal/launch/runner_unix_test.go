@@ -5,6 +5,7 @@ package launch
 import (
 	"context"
 	"errors"
+	"os"
 	"os/exec"
 	"strings"
 	"syscall"
@@ -82,6 +83,66 @@ func TestNativeClientCancellationTargetsProcessGroup(t *testing.T) {
 		if !strings.Contains(environment, want) {
 			t.Fatalf("native client environment is missing %q: %s", want, environment)
 		}
+	}
+}
+
+func TestSignalHelperRunsAsNativeSessionOwner(t *testing.T) {
+	t.Setenv("THINPI_SIGNAL_HELPER", "/test/kill")
+	credential := &syscall.Credential{Uid: 1234, Gid: 5678, Groups: []uint32{5678, 9012}}
+	command := nativeSignalCommand(2468, syscall.SIGTERM, credential)
+	wantArgs := []string{"/test/kill", "-s", "TERM", "--", "-2468"}
+	if strings.Join(command.Args, "\x00") != strings.Join(wantArgs, "\x00") {
+		t.Fatalf("signal helper args=%q want=%q", command.Args, wantArgs)
+	}
+	if command.SysProcAttr == nil || command.SysProcAttr.Credential != credential {
+		t.Fatal("signal helper does not run with the native session credential")
+	}
+}
+
+func TestTerminateProcessGroupEscalatesForUnresponsiveClient(t *testing.T) {
+	command := exec.Command("sh", "-c", "trap '' TERM; exec sleep 30")
+	command.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	pid := command.Process.Pid
+	t.Cleanup(func() { _ = syscall.Kill(-pid, syscall.SIGKILL) })
+	time.Sleep(25 * time.Millisecond)
+	credential := &syscall.Credential{Uid: uint32(os.Getuid()), Gid: uint32(os.Getgid()), NoSetGroups: true}
+	if err := terminateProcessGroupAs(pid, credential, 50*time.Millisecond); err != nil {
+		t.Fatal(err)
+	}
+	wait := make(chan error, 1)
+	go func() { wait <- command.Wait() }()
+	select {
+	case <-wait:
+	case <-time.After(time.Second):
+		t.Fatal("unresponsive native client process group survived termination")
+	}
+}
+
+func TestConfiguredNativeCommandCancellationUsesSessionOwner(t *testing.T) {
+	t.Setenv("THINPI_SIGNAL_HELPER", "/bin/kill")
+	ctx, cancel := context.WithCancel(context.Background())
+	command := exec.CommandContext(ctx, "sh", "-c", "trap '' TERM; exec sleep 30")
+	credential := &syscall.Credential{Uid: uint32(os.Getuid()), Gid: uint32(os.Getgid()), NoSetGroups: true}
+	configureNativeCommand(command, credential, "/tmp", nil)
+	if err := command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	pid := command.Process.Pid
+	t.Cleanup(func() { _ = syscall.Kill(-pid, syscall.SIGKILL) })
+	time.Sleep(25 * time.Millisecond)
+	cancel()
+	wait := make(chan error, 1)
+	go func() { wait <- command.Wait() }()
+	select {
+	case <-wait:
+	case <-time.After(3 * time.Second):
+		t.Fatal("CommandContext cancellation left the native client process group running")
+	}
+	if processGroupExists(pid) {
+		t.Fatal("native client process group still exists after cancellation")
 	}
 }
 

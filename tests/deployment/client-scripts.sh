@@ -46,7 +46,12 @@ grep -F 'pactl move-sink-input "$INPUT" thinpi_parking' "$ROOT/deploy/client/pre
 grep -F 'pactl unload-module "$MODULE_INDEX"' "$ROOT/deploy/client/prepare-pi-audio.sh" >/dev/null
 grep -F 'pulseaudio --kill' "$ROOT/deploy/client/stage.sh" >/dev/null
 grep -F 'TTYPath=/dev/tty2' "$ROOT/deploy/client/thinpi-maintenance@.service" >/dev/null
-grep -F 'CapabilityBoundingSet=CAP_CHOWN CAP_KILL CAP_SETGID CAP_SETUID' "$ROOT/deploy/client/thinpi-agent.service" >/dev/null
+grep -F 'CapabilityBoundingSet=CAP_CHOWN CAP_SETGID CAP_SETUID' "$ROOT/deploy/client/thinpi-agent.service" >/dev/null
+if grep -F 'CAP_KILL' "$ROOT/deploy/client/thinpi-agent.service" >/dev/null; then
+  echo "thinpi-agent must not have CAP_KILL" >&2
+  exit 1
+fi
+grep -F 'DEPENDS="ca-certificates, procps"' "$ROOT/scripts/package-debs.sh" >/dev/null
 grep -F 'pipewire-audio pipewire-alsa pipewire-pulse' "$ROOT/deploy/client/provision.sh" >/dev/null
 grep -F 'bash /tmp/moonlight-repo.sh' "$ROOT/deploy/client/provision.sh" >/dev/null
 grep -F 'install_moonlight_appimage_amd64' "$ROOT/deploy/client/provision.sh" >/dev/null
