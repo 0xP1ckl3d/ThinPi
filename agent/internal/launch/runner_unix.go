@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"log/slog"
 	"os"
 	"os/exec"
 	"os/user"
@@ -166,7 +167,8 @@ func configureNativeCommand(cmd *exec.Cmd, credential *syscall.Credential, sessi
 	cmd.Env = append(os.Environ(), "HOME="+sessionHome, "USER=thinpi", "LOGNAME=thinpi",
 		"THINPI_SESSION_HOME="+sessionHome, "XDG_RUNTIME_DIR="+runtimeDir,
 		"DBUS_SESSION_BUS_ADDRESS=unix:path="+runtimeDir+"/bus",
-		"PULSE_SERVER=unix:"+runtimeDir+"/pulse/native", "SDL_AUDIODRIVER="+audioDriver)
+		"PULSE_SERVER=unix:"+runtimeDir+"/pulse/native",
+		"SDL_AUDIODRIVER="+audioDriver, "SDL_AUDIO_DRIVER="+audioDriver)
 	if audioDriver == "alsa" && strings.Contains(strings.ToLower(filepath.Base(cmd.Path)), "moonlight") {
 		if device := nativeALSAAudioDevice(credential, runtimeDir, sessionHome); device != "" {
 			// Moonlight 6.1 on Raspberry Pi uses SDL2, which reads AUDIODEV.
@@ -175,6 +177,10 @@ func configureNativeCommand(cmd *exec.Cmd, credential *syscall.Credential, sessi
 			cmd.Env = append(cmd.Env, "AUDIODEV="+device,
 				"SDL_AUDIO_ALSA_DEFAULT_DEVICE="+device,
 				"SDL_AUDIO_ALSA_DEFAULT_PLAYBACK_DEVICE="+device)
+			slog.Info("Moonlight audio output selected", "driver", audioDriver,
+				"device", device)
+		} else {
+			slog.Warn("Moonlight could not find a writable ALSA playback device")
 		}
 	}
 	cmd.Env = append(cmd.Env, environment...)
@@ -208,7 +214,12 @@ func nativeALSAAudioDevice(credential *syscall.Credential, runtimeDir, sessionHo
 		drmRoot = "/sys/class/drm"
 	}
 	physical := piALSAAudioCandidates(asoundRoot, drmRoot)
-	for _, candidate := range append([]string{"default"}, physical...) {
+	// Prefer concrete hardware that is present now. ALSA's implicit "default"
+	// can resolve to a disconnected HDMI card or a sound server that is not
+	// running in the kiosk session, while still passing a configuration-only
+	// open check.
+	candidates := append(append([]string{}, physical...), "default")
+	for _, candidate := range candidates {
 		if alsaPlaybackAvailable(candidate, credential, runtimeDir, sessionHome) {
 			return candidate
 		}
@@ -226,10 +237,14 @@ func alsaPlaybackAvailable(device string, credential *syscall.Credential, runtim
 	if err != nil {
 		return false
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 750*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
 	defer cancel()
 	probe := exec.CommandContext(ctx, aplay, "-q", "-D", device, "-t", "raw",
-		"-f", "S16_LE", "-c", "2", "-r", "48000", "/dev/null")
+		"-f", "S16_LE", "-c", "2", "-r", "48000", "-")
+	// An empty input can exit before ALSA proves it can write to the device.
+	// Send 25 ms of silence so disconnected or unusable outputs are rejected
+	// without producing audible sound.
+	probe.Stdin = bytes.NewReader(make([]byte, 4800))
 	if credential != nil {
 		probe.SysProcAttr = &syscall.SysProcAttr{Credential: credential}
 	}

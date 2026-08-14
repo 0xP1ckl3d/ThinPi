@@ -16,7 +16,7 @@ var (
 // piALSAAudioCandidates returns physical playback devices in preference order:
 // non-HDMI devices that are actually present (USB speakers, DACs, analogue
 // outputs), the connected HDMI port, then any remaining HDMI playback device.
-// The configured ALSA "default" device is tried separately before this list.
+// The configured ALSA "default" device is tried separately after this list.
 func piALSAAudioCandidates(asoundRoot, drmRoot string) []string {
 	cards, _ := os.ReadFile(filepath.Join(asoundRoot, "cards"))
 	pcms, _ := os.ReadFile(filepath.Join(asoundRoot, "pcm"))
