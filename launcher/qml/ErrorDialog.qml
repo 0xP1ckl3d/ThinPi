@@ -6,6 +6,7 @@ Dialog {
     id: dialog
     property string message
     property bool confirmSSHHostKey: false
+    property bool confirmAudioUnavailable: false
     modal: true
     anchors.centerIn: Overlay.overlay
     width: Math.min(560, Overlay.overlay.width - 48)
@@ -20,7 +21,7 @@ Dialog {
     contentItem: ColumnLayout {
         spacing: 14
         Label {
-            text: "Unable to complete request"
+            text: dialog.confirmAudioUnavailable ? "Audio unavailable" : "Unable to complete request"
             color: "#f4f8ff"
             font.pixelSize: 24
             font.weight: Font.DemiBold
@@ -35,14 +36,26 @@ Dialog {
         RowLayout {
             Layout.alignment: Qt.AlignRight
             ThinButton {
-                text: dialog.confirmSSHHostKey ? "Cancel" : "Return to ThinPi"
-                onClicked: { if (dialog.confirmSSHHostKey) backend.resolveSSHHostKey(false); dialog.close() }
+                text: (dialog.confirmSSHHostKey || dialog.confirmAudioUnavailable) ? "Cancel" : "Return to ThinPi"
+                onClicked: {
+                    if (dialog.confirmSSHHostKey)
+                        backend.resolveSSHHostKey(false)
+                    else if (dialog.confirmAudioUnavailable)
+                        backend.resolveAudioUnavailable(false)
+                    dialog.close()
+                }
             }
             ThinButton {
-                visible: dialog.confirmSSHHostKey
-                text: "Trust new key"
+                visible: dialog.confirmSSHHostKey || dialog.confirmAudioUnavailable
+                text: dialog.confirmAudioUnavailable ? "Continue without audio" : "Trust new key"
                 variant: "primary"
-                onClicked: { backend.resolveSSHHostKey(true); dialog.close() }
+                onClicked: {
+                    if (dialog.confirmAudioUnavailable)
+                        backend.resolveAudioUnavailable(true)
+                    else
+                        backend.resolveSSHHostKey(true)
+                    dialog.close()
+                }
             }
         }
     }

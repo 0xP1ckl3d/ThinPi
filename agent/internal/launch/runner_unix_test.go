@@ -3,6 +3,7 @@
 package launch
 
 import (
+	"errors"
 	"os/exec"
 	"strings"
 	"syscall"
@@ -21,6 +22,14 @@ func TestClassifyClientFailure(t *testing.T) {
 		if got := classifyClientFailure(output).Error(); !strings.Contains(strings.ToLower(got), want) {
 			t.Fatalf("%q: got %q, want %q", output, got, want)
 		}
+	}
+}
+
+func TestClassifyAudioFailureAsRecoverable(t *testing.T) {
+	err := classifyClientFailure("Failed to open audio device")
+	var audioError *AudioUnavailableError
+	if !errors.As(err, &audioError) {
+		t.Fatalf("audio failure was not recoverable: %T %v", err, err)
 	}
 }
 
@@ -47,5 +56,14 @@ func TestNativeClientCancellationTargetsProcessGroup(t *testing.T) {
 		if !strings.Contains(environment, want) {
 			t.Fatalf("native client environment is missing %q: %s", want, environment)
 		}
+	}
+}
+
+func TestNativePulseOutputAvailableRejectsOnlyNullSink(t *testing.T) {
+	if nativePulseOutputAvailable("0\tauto_null\tmodule-null-sink.c\ts16le 2ch 44100Hz\tSUSPENDED\n") {
+		t.Fatal("PulseAudio null sink was accepted as physical output")
+	}
+	if !nativePulseOutputAvailable("1\talsa_output.platform-hdmi.stereo\tmodule-alsa-card.c\ts16le 2ch 48000Hz\tRUNNING\n") {
+		t.Fatal("physical PulseAudio sink was rejected")
 	}
 }

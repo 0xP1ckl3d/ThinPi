@@ -410,3 +410,98 @@ func TestManagerMinimizesAndResumesSameActiveWindow(t *testing.T) {
 		t.Fatalf("same session window was not resumed: %#v", status)
 	}
 }
+
+type fakeAudioRunner struct {
+	mu      sync.Mutex
+	actions []string
+}
+
+func (f *fakeAudioRunner) Run(context.Context, Command) error { return nil }
+func (f *fakeAudioRunner) SetAudioSuspended(sink string, suspended bool) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	action := "resume:"
+	if suspended {
+		action = "suspend:"
+	}
+	f.actions = append(f.actions, action+sink)
+	return nil
+}
+
+func TestSharedAudioSinkReleasedOnlyWhenNoVisibleSessionUsesIt(t *testing.T) {
+	runner := &fakeAudioRunner{}
+	m := NewManager(&fakeController{}, runner, false, time.Second, Clients{})
+	m.windows = &fakeWindowController{}
+	m.sessions["one"] = &managedSession{status: SessionStatus{ID: "one", State: Active}, pid: 99, audioSink: "thinpi_shared"}
+	m.sessions["two"] = &managedSession{status: SessionStatus{ID: "two", State: Active}, pid: 99, audioSink: "thinpi_shared"}
+
+	if err := m.Minimize("one"); err != nil {
+		t.Fatal(err)
+	}
+	if len(runner.actions) != 0 {
+		t.Fatalf("shared audio was released while another session remained visible: %#v", runner.actions)
+	}
+	if err := m.Minimize("two"); err != nil {
+		t.Fatal(err)
+	}
+	if got := runner.actions; len(got) != 1 || got[0] != "suspend:thinpi_shared" {
+		t.Fatalf("last visible session did not release audio: %#v", got)
+	}
+	if err := m.Resume("one"); err != nil {
+		t.Fatal(err)
+	}
+	if got := runner.actions; len(got) != 2 || got[1] != "resume:thinpi_shared" {
+		t.Fatalf("restored session did not reacquire audio: %#v", got)
+	}
+	m.sessions["one"].cancel = func() {}
+	m.sessions["one"].pid = 0
+	if err := m.Cancel("one"); err != nil {
+		t.Fatal(err)
+	}
+	if got := runner.actions; len(got) != 3 || got[2] != "suspend:thinpi_shared" {
+		t.Fatalf("stopped last visible session did not release audio: %#v", got)
+	}
+}
+
+type audioUnavailableRunner struct {
+	commands chan Command
+	mu       sync.Mutex
+	calls    int
+}
+
+func (r *audioUnavailableRunner) Run(_ context.Context, command Command) error {
+	r.commands <- command
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.calls++
+	if r.calls == 1 {
+		return &AudioUnavailableError{Message: "no output", Diagnostic: "test diagnostic"}
+	}
+	return nil
+}
+
+func TestAudioUnavailableCanContinueWithoutAudio(t *testing.T) {
+	controller := &fakeController{manifest: api.Manifest{TicketID: 9, ConnectionID: 3, Protocol: "mock", Host: "mock", Port: 1}}
+	runner := &audioUnavailableRunner{commands: make(chan Command, 2)}
+	m := NewManager(controller, runner, true, time.Second, Clients{})
+	sessionID, err := m.Launch("valid")
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-runner.commands
+	deadline := time.Now().Add(time.Second)
+	for m.Status().Confirmation == nil && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	status := m.Status()
+	if status.Confirmation == nil || status.Confirmation.Kind != "audio_unavailable" {
+		t.Fatalf("audio confirmation was not exposed: %#v", status)
+	}
+	if err := m.ResolveAudioUnavailable(sessionID, true); err != nil {
+		t.Fatal(err)
+	}
+	second := <-runner.commands
+	if !slices.Contains(second.Env, "THINPI_AUDIO_DISABLED=1") {
+		t.Fatalf("silent retry did not disable audio: %#v", second.Env)
+	}
+}

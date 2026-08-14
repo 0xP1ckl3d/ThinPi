@@ -82,6 +82,12 @@ func (s *Server) handle(c net.Conn) {
 			return
 		}
 		write(c, map[string]any{"accepted": true})
+	case "resolve_audio_unavailable":
+		if err := s.Manager.ResolveAudioUnavailable(q.SessionID, q.Accept); err != nil {
+			write(c, map[string]any{"accepted": false, "error": "No unavailable-audio choice is awaiting confirmation."})
+			return
+		}
+		write(c, map[string]any{"accepted": true})
 	case "maintenance":
 		if q.Ticket == "" || s.Maintenance == nil {
 			write(c, map[string]any{"accepted": false, "error": "Local maintenance is unavailable."})

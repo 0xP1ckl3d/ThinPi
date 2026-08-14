@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 )
 
 type PlatformRunner struct{}
@@ -24,31 +25,19 @@ func (PlatformRunner) Run(ctx context.Context, c Command) error {
 	if c.Path == "thinpi-mock" {
 		return runMock(ctx, c)
 	}
-	var credential *syscall.Credential
-	var sessionHome string
-	if u, err := user.Lookup("thinpi"); err == nil {
-		uid, uidErr := strconv.ParseUint(u.Uid, 10, 32)
-		gid, gidErr := strconv.ParseUint(u.Gid, 10, 32)
-		if uidErr == nil && gidErr == nil {
-			credential = &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}
-			if ids, err := u.GroupIds(); err == nil {
-				for _, id := range ids {
-					if n, err := strconv.ParseUint(id, 10, 32); err == nil {
-						credential.Groups = append(credential.Groups, uint32(n))
-					}
-				}
-			}
-			sessionHome = u.HomeDir
-		}
-	}
+	credential, sessionHome := nativeSessionIdentity()
 	configure := func(cmd *exec.Cmd) {
 		configureNativeCommand(cmd, credential, sessionHome, c.Env)
 	}
 	if err := ensureMoonlightPaired(ctx, c, configure); err != nil {
 		return err
 	}
-	if err := prepareMoonlightAudio(ctx, c, configure); err != nil {
+	audioSink, err := prepareMoonlightAudio(ctx, c, configure)
+	if err != nil {
 		return err
+	}
+	if audioSink != "" && c.OnAudioReady != nil {
+		c.OnAudioReady(audioSink)
 	}
 	args := append([]string(nil), c.Args...)
 	var materialFiles []string
@@ -130,7 +119,7 @@ func (PlatformRunner) Run(ctx context.Context, c Command) error {
 	// kiosk identity so Xorg, audio, input and Moonlight pairing state work in
 	// the same session as the launcher.
 	configure(cmd)
-	err := cmd.Start()
+	err = cmd.Start()
 	if err == nil && c.OnStarted != nil {
 		c.OnStarted(cmd.Process.Pid)
 	}
@@ -152,6 +141,27 @@ func (PlatformRunner) Run(ctx context.Context, c Command) error {
 	return err
 }
 
+func nativeSessionIdentity() (*syscall.Credential, string) {
+	var credential *syscall.Credential
+	var sessionHome string
+	if u, err := user.Lookup("thinpi"); err == nil {
+		uid, uidErr := strconv.ParseUint(u.Uid, 10, 32)
+		gid, gidErr := strconv.ParseUint(u.Gid, 10, 32)
+		if uidErr == nil && gidErr == nil {
+			credential = &syscall.Credential{Uid: uint32(uid), Gid: uint32(gid)}
+			if ids, err := u.GroupIds(); err == nil {
+				for _, id := range ids {
+					if n, err := strconv.ParseUint(id, 10, 32); err == nil {
+						credential.Groups = append(credential.Groups, uint32(n))
+					}
+				}
+			}
+			sessionHome = u.HomeDir
+		}
+	}
+	return credential, sessionHome
+}
+
 func configureNativeCommand(cmd *exec.Cmd, credential *syscall.Credential, sessionHome string, environment []string) {
 	if len(environment) > 0 {
 		cmd.Env = append(os.Environ(), environment...)
@@ -168,6 +178,9 @@ func configureNativeCommand(cmd *exec.Cmd, credential *syscall.Credential, sessi
 	}
 	runtimeDir := nativeRuntimeDir(credential)
 	audioDriver := nativeAudioDriver()
+	if nativeEnvironmentFlag(environment, "THINPI_AUDIO_DISABLED") {
+		audioDriver = "dummy"
+	}
 	cmd.Env = append(os.Environ(), "HOME="+sessionHome, "USER=thinpi", "LOGNAME=thinpi",
 		"THINPI_SESSION_HOME="+sessionHome, "XDG_RUNTIME_DIR="+runtimeDir,
 		"DBUS_SESSION_BUS_ADDRESS=unix:path="+runtimeDir+"/bus",
@@ -208,24 +221,41 @@ func nativeRuntimeDir(credential *syscall.Credential) string {
 	return "/run/user/" + strconv.FormatUint(uint64(credential.Uid), 10)
 }
 
-func prepareMoonlightAudio(ctx context.Context, command Command, configure func(*exec.Cmd)) error {
-	if command.MoonlightPairing == nil || !nativeRaspberryPi() || nativeAudioDriver() != "pulseaudio" {
-		return nil
+func prepareMoonlightAudio(ctx context.Context, command Command, configure func(*exec.Cmd)) (string, error) {
+	if command.MoonlightPairing == nil || nativeEnvironmentFlag(command.Env, "THINPI_AUDIO_DISABLED") || nativeAudioDriver() != "pulseaudio" {
+		return "", nil
+	}
+	if !nativeRaspberryPi() {
+		pactl, err := exec.LookPath("pactl")
+		if err != nil {
+			return "", nil
+		}
+		probe := exec.CommandContext(ctx, pactl, "list", "short", "sinks")
+		configure(probe)
+		output, probeErr := probe.CombinedOutput()
+		if probeErr != nil || !nativePulseOutputAvailable(string(output)) {
+			diagnostic := strings.TrimSpace(string(output))
+			if diagnostic == "" && probeErr != nil {
+				diagnostic = probeErr.Error()
+			}
+			return "", &AudioUnavailableError{
+				Message:    "No usable audio output is available for this connection.",
+				Diagnostic: diagnostic,
+			}
+		}
+		return "", nil
 	}
 	device := nativeALSAAudioDevice()
 	if device == "" {
-		return &ClientRuntimeError{
+		return "", &AudioUnavailableError{
 			Message:    "ThinPi could not find a connected audio playback device.",
 			Diagnostic: "No ALSA playback PCM was discovered for the Raspberry Pi kiosk session.",
 		}
 	}
-	helper := strings.TrimSpace(os.Getenv("THINPI_PI_AUDIO_HELPER"))
-	if helper == "" {
-		helper = "/usr/local/libexec/thinpi-prepare-pi-audio"
-	}
+	helper := nativePiAudioHelper()
 	digest := sha256.Sum256([]byte(device))
 	sinkName := fmt.Sprintf("thinpi_%x", digest[:8])
-	prepare := exec.CommandContext(ctx, helper, device, sinkName)
+	prepare := exec.CommandContext(ctx, helper, "prepare", device, sinkName)
 	configure(prepare)
 	output, err := prepare.CombinedOutput()
 	if err != nil {
@@ -235,14 +265,72 @@ func prepareMoonlightAudio(ctx context.Context, command Command, configure func(
 		}
 		slog.Error("Moonlight audio output preparation failed", "device", device,
 			"error", diagnostic)
-		return &ClientRuntimeError{
+		return "", &AudioUnavailableError{
 			Message:    "ThinPi could not prepare the selected audio output.",
 			Diagnostic: diagnostic,
 		}
 	}
 	slog.Info("Moonlight audio output prepared", "driver", "pulseaudio",
 		"device", device, "sink", sinkName)
+	return sinkName, nil
+}
+
+func nativePiAudioHelper() string {
+	helper := strings.TrimSpace(os.Getenv("THINPI_PI_AUDIO_HELPER"))
+	if helper == "" {
+		helper = "/usr/local/libexec/thinpi-prepare-pi-audio"
+	}
+	return helper
+}
+
+func (PlatformRunner) SetAudioSuspended(sink string, suspended bool) error {
+	action := "resume"
+	if suspended {
+		action = "suspend"
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	credential, sessionHome := nativeSessionIdentity()
+	cmd := exec.CommandContext(ctx, nativePiAudioHelper(), action, sink)
+	configureNativeCommand(cmd, credential, sessionHome, nil)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		diagnostic := strings.TrimSpace(string(output))
+		if diagnostic == "" {
+			diagnostic = err.Error()
+		}
+		return fmt.Errorf("%s ThinPi audio sink %s: %s", action, sink, diagnostic)
+	}
 	return nil
+}
+
+func nativeEnvironmentFlag(environment []string, name string) bool {
+	prefix := name + "="
+	for i := len(environment) - 1; i >= 0; i-- {
+		if strings.HasPrefix(environment[i], prefix) {
+			value := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(environment[i], prefix)))
+			return value == "1" || value == "true" || value == "yes"
+		}
+	}
+	return false
+}
+
+func nativePulseOutputAvailable(output string) bool {
+	for _, line := range strings.Split(output, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		name := strings.ToLower(fields[1])
+		driver := ""
+		if len(fields) > 2 {
+			driver = strings.ToLower(fields[2])
+		}
+		if !strings.Contains(name, "auto_null") && !strings.Contains(driver, "module-null-sink") {
+			return true
+		}
+	}
+	return false
 }
 
 func nativeRaspberryPi() bool {
@@ -283,6 +371,8 @@ func classifyClientFailure(output string) error {
 	switch {
 	case strings.Contains(upper, "FAILED TO OPEN DISPLAY") || strings.Contains(upper, "CANNOT OPEN DISPLAY"):
 		return &ClientRuntimeError{Message: "The remote client could not access the ThinPi display. Restart the ThinPi UI and try again.", Diagnostic: output}
+	case strings.Contains(upper, "FAILED TO OPEN AUDIO DEVICE") || strings.Contains(upper, "NO AVAILABLE AUDIO DEVICE") || strings.Contains(upper, "AUDIO DEVICE") && strings.Contains(upper, "FAILED"):
+		return &AudioUnavailableError{Message: "The remote client could not open the selected audio output.", Diagnostic: output}
 	case strings.Contains(upper, "ERRCONNECT_LOGON_FAILURE") || strings.Contains(upper, "STATUS_LOGON_FAILURE") || strings.Contains(upper, "AUTHENTICATION FAILURE"):
 		return &ClientRuntimeError{Message: "The remote system rejected the assigned username or password.", Diagnostic: output}
 	case strings.Contains(upper, "PASSWORD_EXPIRED"):

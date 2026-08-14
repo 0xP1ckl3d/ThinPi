@@ -6,10 +6,8 @@ Conflicts=getty@tty7.service
 
 [Service]
 Type=simple
-RuntimeDirectory=thinpi-session
-RuntimeDirectoryMode=0700
 ExecStartPre=/usr/local/libexec/thinpi-detect-display
-ExecStartPre=/usr/bin/chown thinpi:thinpi /run/thinpi-session
+ExecStartPre=/usr/bin/install -d -o thinpi -g thinpi -m 0700 /run/thinpi-session
 ExecStart=/usr/sbin/runuser -u thinpi -- /usr/bin/xinit /usr/local/libexec/thinpi-xinitrc -- /usr/lib/xorg/Xorg.wrap :0 -nolisten tcp vt7 -keeptty
 ExecStartPost=/usr/bin/chvt 7
 Restart=always

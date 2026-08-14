@@ -79,6 +79,7 @@ type Command struct {
 	Files            []FileInput
 	MoonlightPairing *MoonlightPairing
 	OnStarted        func(int)
+	OnAudioReady     func(string)
 }
 
 type MoonlightPairing struct {
@@ -109,12 +110,23 @@ type WindowController interface {
 	Resume(string) error
 }
 
+type AudioController interface {
+	SetAudioSuspended(string, bool) error
+}
+
 type ClientRuntimeError struct {
 	Message    string
 	Diagnostic string
 }
 
 func (e *ClientRuntimeError) Error() string { return e.Message }
+
+type AudioUnavailableError struct {
+	Message    string
+	Diagnostic string
+}
+
+func (e *AudioUnavailableError) Error() string { return e.Message }
 
 type boundedOutput struct {
 	limit int
@@ -198,6 +210,7 @@ type Manager struct {
 	sshTrust     *SSHTrustStore
 	sshMu        sync.Mutex
 	windows      WindowController
+	audio        AudioController
 	sessions     map[string]*managedSession
 	nextSession  uint64
 }
@@ -208,10 +221,16 @@ type managedSession struct {
 	pid         int
 	windowState string
 	pendingSSH  *PendingSSHHostKey
+	audioChoice chan bool
+	audioSink   string
 }
 
 func NewManager(c Controller, r Runner, mock bool, d time.Duration, clients Clients) *Manager {
-	return &Manager{controller: c, runner: r, mock: mock, mockDuration: d, clients: clients, sshTrust: NewSSHTrustStore(defaultSSHKnownHostsPath()), status: Status{State: Idle, ControllerReachable: true, FreeRDP: clients.FreeRDP, Moonlight: clients.Moonlight, VNC: clients.VNC, SSH: clients.SSH}, log: slog.New(slog.NewTextHandler(io.Discard, nil)), windows: newWindowController(), sessions: make(map[string]*managedSession)}
+	m := &Manager{controller: c, runner: r, mock: mock, mockDuration: d, clients: clients, sshTrust: NewSSHTrustStore(defaultSSHKnownHostsPath()), status: Status{State: Idle, ControllerReachable: true, FreeRDP: clients.FreeRDP, Moonlight: clients.Moonlight, VNC: clients.VNC, SSH: clients.SSH}, log: slog.New(slog.NewTextHandler(io.Discard, nil)), windows: newWindowController(), sessions: make(map[string]*managedSession)}
+	if audio, ok := r.(AudioController); ok {
+		m.audio = audio
+	}
+	return m
 }
 
 func (m *Manager) SetLogger(log *slog.Logger) {
@@ -267,8 +286,42 @@ func (m *Manager) setSession(id string, state State, err error) {
 
 func (m *Manager) removeSession(id string) {
 	m.mu.Lock()
+	sink := ""
+	if session := m.sessions[id]; session != nil {
+		sink = session.audioSink
+	}
 	delete(m.sessions, id)
+	shouldSuspend := sink != "" && !m.audioSinkInUseLocked(sink)
+	audio := m.audio
 	m.mu.Unlock()
+	if shouldSuspend && audio != nil {
+		if err := audio.SetAudioSuspended(sink, true); err != nil {
+			m.log.Warn("could not release session audio output", "sink", sink, "error", err)
+		}
+	}
+}
+
+func (m *Manager) audioSinkInUseLocked(sink string) bool {
+	for _, session := range m.sessions {
+		if session.audioSink == sink && session.status.State == Active && !session.status.Minimized {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *Manager) releaseAudioIfUnused(sink string) {
+	if sink == "" || m.audio == nil {
+		return
+	}
+	m.mu.Lock()
+	inUse := m.audioSinkInUseLocked(sink)
+	m.mu.Unlock()
+	if !inUse {
+		if err := m.audio.SetAudioSuspended(sink, true); err != nil {
+			m.log.Warn("could not release session audio output", "sink", sink, "error", err)
+		}
+	}
 }
 
 func (m *Manager) Launch(ticket string) (string, error) {
@@ -341,6 +394,13 @@ func (m *Manager) run(ctx context.Context, id, ticket string) {
 		}
 		m.mu.Unlock()
 	}
+	cmd.OnAudioReady = func(sink string) {
+		m.mu.Lock()
+		if session := m.sessions[id]; session != nil {
+			session.audioSink = sink
+		}
+		m.mu.Unlock()
+	}
 	m.setSession(id, Starting, nil)
 	_ = m.controller.SessionEvent(ctx, manifest.TicketID, manifest.ConnectionID, "session_started", "success", map[string]string{"protocol": manifest.Protocol})
 	m.setSession(id, Active, nil)
@@ -352,6 +412,29 @@ func (m *Manager) run(ctx context.Context, id, ticket string) {
 		defer timeoutCancel()
 	}
 	err = m.runner.Run(runCtx, cmd)
+	var audioUnavailable *AudioUnavailableError
+	if err != nil && runCtx.Err() == nil && errors.As(err, &audioUnavailable) {
+		m.log.Warn("native audio unavailable", "connection_id", manifest.ConnectionID,
+			"diagnostic", audioUnavailable.Diagnostic)
+		continueWithoutAudio, decisionErr := m.awaitAudioChoice(runCtx, id, audioUnavailable)
+		if decisionErr != nil {
+			err = decisionErr
+		} else if !continueWithoutAudio {
+			_ = m.controller.SessionEvent(context.Background(), manifest.TicketID,
+				manifest.ConnectionID, "session_exited", "cancelled", map[string]any{"error": false})
+			m.log.Info("native client exited", "connection_id", manifest.ConnectionID,
+				"protocol", manifest.Protocol, "result", "cancelled")
+			m.removeSession(id)
+			return
+		} else {
+			cmd.Env = append(cmd.Env, "THINPI_AUDIO_DISABLED=1")
+			m.setSession(id, Starting, nil)
+			m.setSession(id, Active, nil)
+			m.log.Info("native client continuing without audio",
+				"connection_id", manifest.ConnectionID, "protocol", manifest.Protocol)
+			err = m.runner.Run(runCtx, cmd)
+		}
+	}
 	result := "success"
 	if errors.Is(runCtx.Err(), context.DeadlineExceeded) {
 		result = "timeout"
@@ -379,6 +462,50 @@ func (m *Manager) run(ctx context.Context, id, ticket string) {
 	}
 	m.setSession(id, Stopping, nil)
 	m.removeSession(id)
+}
+
+func (m *Manager) awaitAudioChoice(ctx context.Context, id string, unavailable *AudioUnavailableError) (bool, error) {
+	choice := make(chan bool, 1)
+	message := "Audio is unavailable for this connection. Continue without audio?"
+	m.mu.Lock()
+	session := m.sessions[id]
+	if session == nil {
+		m.mu.Unlock()
+		return false, context.Canceled
+	}
+	session.audioChoice = choice
+	session.status.State = Failed
+	session.status.LastError = message
+	session.status.Confirmation = &Confirmation{Kind: "audio_unavailable", Message: message}
+	m.mu.Unlock()
+
+	select {
+	case accepted := <-choice:
+		m.mu.Lock()
+		if session := m.sessions[id]; session != nil {
+			session.audioChoice = nil
+			session.status.Confirmation = nil
+			session.status.LastError = ""
+		}
+		m.mu.Unlock()
+		return accepted, nil
+	case <-ctx.Done():
+		return false, ctx.Err()
+	}
+}
+
+func (m *Manager) ResolveAudioUnavailable(id string, accept bool) error {
+	m.mu.Lock()
+	session := m.sessions[id]
+	if session == nil || session.audioChoice == nil || session.status.Confirmation == nil || session.status.Confirmation.Kind != "audio_unavailable" {
+		m.mu.Unlock()
+		return errors.New("no unavailable-audio choice is awaiting confirmation")
+	}
+	choice := session.audioChoice
+	session.audioChoice = nil
+	m.mu.Unlock()
+	choice <- accept
+	return nil
 }
 
 func (m *Manager) ResolveSSHHostKeyChange(id string, accept bool) error {
@@ -449,38 +576,54 @@ func (m *Manager) commandFor(x api.Manifest) (Command, error) {
 }
 func (m *Manager) Cancel(id string) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	if id == "" {
 		if len(m.sessions) == 0 {
+			m.mu.Unlock()
 			return errors.New("no active session")
 		}
+		sinks := make(map[string]struct{})
+		removeNow := make([]string, 0)
 		for sessionID, session := range m.sessions {
 			terminal := session.status.State == Failed || session.pendingSSH != nil
 			session.status.State = Stopping
 			session.cancel()
 			terminateProcessGroup(session.pid)
+			if session.audioSink != "" {
+				sinks[session.audioSink] = struct{}{}
+			}
 			if terminal {
-				delete(m.sessions, sessionID)
+				removeNow = append(removeNow, sessionID)
 				continue
 			}
 			forcedID := sessionID
 			time.AfterFunc(2*time.Second, func() { m.removeSession(forcedID) })
 		}
+		m.mu.Unlock()
+		for _, sessionID := range removeNow {
+			m.removeSession(sessionID)
+		}
+		for sink := range sinks {
+			m.releaseAudioIfUnused(sink)
+		}
 		return nil
 	}
 	session := m.sessions[id]
 	if session == nil {
+		m.mu.Unlock()
 		return errors.New("no active session")
 	}
 	terminal := session.status.State == Failed || session.pendingSSH != nil
+	sink := session.audioSink
 	session.status.State = Stopping
 	session.cancel()
 	terminateProcessGroup(session.pid)
+	m.mu.Unlock()
 	if terminal {
-		delete(m.sessions, id)
+		m.removeSession(id)
 	} else {
 		time.AfterFunc(2*time.Second, func() { m.removeSession(id) })
 	}
+	m.releaseAudioIfUnused(sink)
 	return nil
 }
 
@@ -505,13 +648,22 @@ func (m *Manager) Minimize(id string) error {
 		}
 	}
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	session = m.sessions[id]
 	if session == nil || session.status.State != Active {
+		m.mu.Unlock()
 		return errors.New("session ended while it was being minimized")
 	}
 	session.windowState = windowState
 	session.status.Minimized = true
+	sink := session.audioSink
+	shouldSuspend := sink != "" && !m.audioSinkInUseLocked(sink)
+	audio := m.audio
+	m.mu.Unlock()
+	if shouldSuspend && audio != nil {
+		if err := audio.SetAudioSuspended(sink, true); err != nil {
+			m.log.Warn("could not release minimized session audio output", "sink", sink, "error", err)
+		}
+	}
 	return nil
 }
 
@@ -522,20 +674,28 @@ func (m *Manager) Resume(id string) error {
 		m.mu.Unlock()
 		return errors.New("no minimized session")
 	}
-	windows, windowState, mock := m.windows, session.windowState, m.mock
+	windows, windowState, mock, sink, audio := m.windows, session.windowState, m.mock, session.audioSink, m.audio
 	m.mu.Unlock()
+	if sink != "" && audio != nil {
+		if err := audio.SetAudioSuspended(sink, false); err != nil {
+			m.log.Warn("could not restore session audio output", "sink", sink, "error", err)
+		}
+	}
 	if !mock {
 		if err := windows.Resume(windowState); err != nil {
+			m.releaseAudioIfUnused(sink)
 			return err
 		}
 	}
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	session = m.sessions[id]
 	if session == nil || session.status.State != Active {
+		m.mu.Unlock()
+		m.releaseAudioIfUnused(sink)
 		return errors.New("session ended while it was being restored")
 	}
 	session.status.Minimized = false
+	m.mu.Unlock()
 	return nil
 }
 

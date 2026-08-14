@@ -36,6 +36,8 @@ class Backend final : public QObject {
                  sessionsChanged)
   Q_PROPERTY(bool sshHostKeyConfirmation READ sshHostKeyConfirmation NOTIFY
                  sshHostKeyConfirmationChanged)
+  Q_PROPERTY(bool audioUnavailableConfirmation READ audioUnavailableConfirmation
+                 NOTIFY audioUnavailableConfirmationChanged)
   Q_PROPERTY(QString clientTheme READ clientTheme NOTIFY clientThemeChanged)
   Q_PROPERTY(
       QString terminalTheme READ terminalTheme NOTIFY terminalThemeChanged)
@@ -63,6 +65,9 @@ public:
   bool currentSessionVisible() const;
   bool devMode() const { return m_devMode; }
   bool sshHostKeyConfirmation() const { return m_sshHostKeyConfirmation; }
+  bool audioUnavailableConfirmation() const {
+    return m_audioUnavailableConfirmation;
+  }
   ConnectionModel *connections() { return &m_connections; }
   QString clientTheme() const { return m_clientTheme; }
   QString terminalTheme() const { return m_terminalTheme; }
@@ -89,6 +94,7 @@ public:
   Q_INVOKABLE void dismissError();
   Q_INVOKABLE void retry();
   Q_INVOKABLE void resolveSSHHostKey(bool accept);
+  Q_INVOKABLE void resolveAudioUnavailable(bool accept);
 
 protected:
   bool eventFilter(QObject *watched, QEvent *event) override;
@@ -107,6 +113,7 @@ signals:
   void activeConnectionIDChanged();
   void sessionsChanged();
   void sshHostKeyConfirmationChanged();
+  void audioUnavailableConfirmationChanged();
   void profileUpdated();
   void clientThemeChanged();
   void terminalThemeChanged();
@@ -151,13 +158,15 @@ private:
   };
   QHash<qint64, SessionInfo> m_sessions;
   QString m_sshConfirmationSessionID;
+  QString m_audioConfirmationSessionID;
   int m_sessionRevision = 0;
   QVariantList m_loginUsers;
   int m_idleMinutes = 30;
   int m_screenSleepMinutes = 15;
   bool m_busy = false, m_isAdmin = false, m_devMode = false,
        m_sessionActive = false, m_sessionExpired = false,
-       m_hasMoreUsers = false, m_sshHostKeyConfirmation = false;
+       m_hasMoreUsers = false, m_sshHostKeyConfirmation = false,
+       m_audioUnavailableConfirmation = false;
   bool m_sessionMinimized = false;
   bool m_updatingClipboard = false;
   bool m_toolbarCursorOverride = false;

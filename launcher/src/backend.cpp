@@ -155,6 +155,16 @@ void Backend::clearLocalSession() {
   m_sessionExpired = false;
   m_connections.clear();
   m_restrictionMessage.clear();
+  m_sshConfirmationSessionID.clear();
+  m_audioConfirmationSessionID.clear();
+  if (m_sshHostKeyConfirmation) {
+    m_sshHostKeyConfirmation = false;
+    emit sshHostKeyConfirmationChanged();
+  }
+  if (m_audioUnavailableConfirmation) {
+    m_audioUnavailableConfirmation = false;
+    emit audioUnavailableConfirmationChanged();
+  }
   m_poll.stop();
   m_idle.stop();
   m_keepalive.stop();
@@ -729,13 +739,18 @@ void Backend::pollAgent() {
 
       if (session.state == "error") {
         const auto confirmation = object["confirmation"].toObject();
-        const auto needsConfirmation =
-            confirmation["kind"].toString() == "ssh_host_key_changed";
-        if (needsConfirmation) {
+        const auto confirmationKind = confirmation["kind"].toString();
+        if (confirmationKind == "ssh_host_key_changed") {
           m_sshConfirmationSessionID = sessionID;
           if (!m_sshHostKeyConfirmation) {
             m_sshHostKeyConfirmation = true;
             emit sshHostKeyConfirmationChanged();
+          }
+        } else if (confirmationKind == "audio_unavailable") {
+          m_audioConfirmationSessionID = sessionID;
+          if (!m_audioUnavailableConfirmation) {
+            m_audioUnavailableConfirmation = true;
+            emit audioUnavailableConfirmationChanged();
           }
         }
         if (connectionID == m_activeConnectionID) {
@@ -894,5 +909,34 @@ void Backend::resolveSSHHostKey(bool accept) {
                  armIdleLock();
                  if (accept)
                    launch(m_connections.indexOfId(connectionID));
+               });
+}
+
+void Backend::resolveAudioUnavailable(bool accept) {
+  const auto connectionID = m_activeConnectionID;
+  agentRequest({{"action", "resolve_audio_unavailable"},
+                {"session_id", m_audioConfirmationSessionID},
+                {"accept", accept}},
+               [this, accept, connectionID](QJsonObject response) {
+                 if (!response["accepted"].toBool()) {
+                   fail("The audio confirmation is no longer available.");
+                   return;
+                 }
+                 m_audioUnavailableConfirmation = false;
+                 m_audioConfirmationSessionID.clear();
+                 emit audioUnavailableConfirmationChanged();
+                 dismissError();
+                 setBusy(false);
+                 if (accept) {
+                   setView("session");
+                   return;
+                 }
+                 m_sessions.remove(connectionID);
+                 ++m_sessionRevision;
+                 emit sessionsChanged();
+                 setSessionActive(!m_sessions.isEmpty());
+                 setSessionMinimized(false);
+                 setView("dashboard");
+                 armIdleLock();
                });
 }
