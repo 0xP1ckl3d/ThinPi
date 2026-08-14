@@ -109,7 +109,7 @@ func (PlatformRunner) Run(ctx context.Context, c Command) error {
 		}
 	}
 	cmd := exec.CommandContext(ctx, c.Path, args...)
-	output := &boundedOutput{limit: 32768}
+	output := &boundedOutput{limit: 32768, updated: make(chan struct{}, 1)}
 	cmd.Stdout = output
 	cmd.Stderr = output
 	if c.Stdin != "" {
@@ -124,7 +124,7 @@ func (PlatformRunner) Run(ctx context.Context, c Command) error {
 		c.OnStarted(cmd.Process.Pid)
 	}
 	if err == nil {
-		err = cmd.Wait()
+		err = waitForNativeClient(cmd, output, c)
 	}
 	if err != nil && ctx.Err() == nil {
 		diagnostic := redactClientOutput(output.String(), c)
@@ -139,6 +139,31 @@ func (PlatformRunner) Run(ctx context.Context, c Command) error {
 		return classifyClientFailure(diagnostic)
 	}
 	return err
+}
+
+func waitForNativeClient(cmd *exec.Cmd, output *boundedOutput, command Command) error {
+	if command.MoonlightPairing == nil {
+		return cmd.Wait()
+	}
+	wait := make(chan error, 1)
+	go func() { wait <- cmd.Wait() }()
+	for {
+		select {
+		case err := <-wait:
+			return err
+		case <-output.updated:
+			diagnostic := redactClientOutput(output.String(), command)
+			if earlyFailure := moonlightFatalStartupFailure(diagnostic); earlyFailure != nil {
+				if cmd.Cancel != nil {
+					_ = cmd.Cancel()
+				} else {
+					_ = cmd.Process.Kill()
+				}
+				<-wait
+				return earlyFailure
+			}
+		}
+	}
 }
 
 func nativeSessionIdentity() (*syscall.Credential, string) {
@@ -368,11 +393,12 @@ func clientExitedNormally(output string) bool {
 
 func classifyClientFailure(output string) error {
 	upper := strings.ToUpper(output)
+	if audioFailure := moonlightFatalStartupFailure(output); audioFailure != nil {
+		return audioFailure
+	}
 	switch {
 	case strings.Contains(upper, "FAILED TO OPEN DISPLAY") || strings.Contains(upper, "CANNOT OPEN DISPLAY"):
 		return &ClientRuntimeError{Message: "The remote client could not access the ThinPi display. Restart the ThinPi UI and try again.", Diagnostic: output}
-	case strings.Contains(upper, "FAILED TO OPEN AUDIO DEVICE") || strings.Contains(upper, "NO AVAILABLE AUDIO DEVICE") || strings.Contains(upper, "AUDIO DEVICE") && strings.Contains(upper, "FAILED"):
-		return &AudioUnavailableError{Message: "The remote client could not open the selected audio output.", Diagnostic: output}
 	case strings.Contains(upper, "ERRCONNECT_LOGON_FAILURE") || strings.Contains(upper, "STATUS_LOGON_FAILURE") || strings.Contains(upper, "AUTHENTICATION FAILURE"):
 		return &ClientRuntimeError{Message: "The remote system rejected the assigned username or password.", Diagnostic: output}
 	case strings.Contains(upper, "PASSWORD_EXPIRED"):
@@ -390,4 +416,14 @@ func classifyClientFailure(output string) error {
 	default:
 		return &ClientRuntimeError{Message: "The remote client exited unexpectedly. An administrator can inspect: journalctl -b -u thinpi-agent -o cat --no-pager", Diagnostic: output}
 	}
+}
+
+func moonlightFatalStartupFailure(output string) error {
+	upper := strings.ToUpper(output)
+	if strings.Contains(upper, "FAILED TO OPEN AUDIO DEVICE") ||
+		strings.Contains(upper, "NO AVAILABLE AUDIO DEVICE") ||
+		strings.Contains(upper, "AUDIO DEVICE") && strings.Contains(upper, "FAILED") {
+		return &AudioUnavailableError{Message: "The remote client could not open the selected audio output.", Diagnostic: output}
+	}
+	return nil
 }

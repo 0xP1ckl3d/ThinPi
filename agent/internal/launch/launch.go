@@ -129,20 +129,34 @@ type AudioUnavailableError struct {
 func (e *AudioUnavailableError) Error() string { return e.Message }
 
 type boundedOutput struct {
-	limit int
-	data  []byte
+	mu      sync.Mutex
+	limit   int
+	data    []byte
+	updated chan struct{}
 }
 
 func (b *boundedOutput) Write(p []byte) (int, error) {
 	written := len(p)
+	b.mu.Lock()
 	b.data = append(b.data, p...)
 	if len(b.data) > b.limit {
 		b.data = append([]byte(nil), b.data[len(b.data)-b.limit:]...)
 	}
+	b.mu.Unlock()
+	if b.updated != nil {
+		select {
+		case b.updated <- struct{}{}:
+		default:
+		}
+	}
 	return written, nil
 }
 
-func (b *boundedOutput) String() string { return string(b.data) }
+func (b *boundedOutput) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return string(b.data)
+}
 
 func redactClientOutput(output string, command Command) string {
 	secrets := []string{}
@@ -349,7 +363,17 @@ func (m *Manager) run(ctx context.Context, id, ticket string) {
 	if session := m.sessions[id]; session != nil {
 		session.status.ConnectionID = manifest.ConnectionID
 	}
+	duplicates := make([]string, 0)
+	for sessionID, session := range m.sessions {
+		if sessionID != id && session.status.ConnectionID == manifest.ConnectionID && session.status.State != Stopping {
+			duplicates = append(duplicates, sessionID)
+		}
+	}
 	m.mu.Unlock()
+	for _, sessionID := range duplicates {
+		m.log.Warn("replacing existing connection session", "connection_id", manifest.ConnectionID, "session_id", sessionID)
+		_ = m.Cancel(sessionID)
+	}
 	m.setSession(id, Preparing, nil)
 	m.log.Info("launch manifest redeemed", "connection_id", manifest.ConnectionID, "protocol", manifest.Protocol)
 	var cmd Command
@@ -990,7 +1014,7 @@ func MoonlightCommand(binary string, x api.Manifest) (Command, error) {
 		"--display-mode", "borderless", "--absolute-mouse", "--capture-system-keys", "always",
 		"--video-decoder", "auto", "--video-codec", codecValue,
 		"--audio-config", "stereo",
-		"--frame-pacing", "--keep-awake"}
+		"--frame-pacing", "--keep-awake", "--quit-after"}
 	if cfg.HDR {
 		args = append(args, "--hdr")
 	} else {

@@ -69,7 +69,7 @@ func TestMoonlightDirectLaunch(t *testing.T) {
 		t.Fatal(err)
 	}
 	joined := strings.Join(c.Args, " ")
-	for _, want := range []string{"stream gaming.local Desktop", "--resolution 1920x1080", "--fps 60", "--bitrate 20000", "--display-mode borderless", "--absolute-mouse", "--capture-system-keys always", "--video-decoder auto", "--video-codec H.264", "--audio-config stereo"} {
+	for _, want := range []string{"stream gaming.local Desktop", "--resolution 1920x1080", "--fps 60", "--bitrate 20000", "--display-mode borderless", "--absolute-mouse", "--capture-system-keys always", "--video-decoder auto", "--video-codec H.264", "--audio-config stereo", "--quit-after"} {
 		if !strings.Contains(joined, want) {
 			t.Fatalf("missing %q in %q", want, joined)
 		}
@@ -260,6 +260,15 @@ type concurrentRunner struct {
 	release chan struct{}
 }
 
+type ticketController map[string]api.Manifest
+
+func (c ticketController) Redeem(_ context.Context, ticket string) (api.Manifest, error) {
+	return c[ticket], nil
+}
+func (ticketController) SessionEvent(context.Context, int64, int64, string, string, any) error {
+	return nil
+}
+
 func (r *concurrentRunner) Run(ctx context.Context, _ Command) error {
 	r.started <- struct{}{}
 	select {
@@ -271,7 +280,10 @@ func (r *concurrentRunner) Run(ctx context.Context, _ Command) error {
 }
 
 func TestConcurrentLaunchesRemainIndependent(t *testing.T) {
-	fc := &fakeController{manifest: api.Manifest{ConnectionID: 1, Protocol: "mock", Host: "mock", Port: 1, Config: json.RawMessage(`{}`)}}
+	fc := ticketController{
+		"valid":  {ConnectionID: 1, Protocol: "mock", Host: "mock", Port: 1, Config: json.RawMessage(`{}`)},
+		"second": {ConnectionID: 2, Protocol: "mock", Host: "mock", Port: 1, Config: json.RawMessage(`{}`)},
+	}
 	runner := &concurrentRunner{started: make(chan struct{}, 2), release: make(chan struct{})}
 	m := NewManager(fc, runner, true, time.Second, Clients{})
 	first, err := m.Launch("valid")
@@ -301,6 +313,31 @@ func TestConcurrentLaunchesRemainIndependent(t *testing.T) {
 	if m.HasSessions() {
 		t.Fatal("completed sessions were not removed")
 	}
+}
+
+func TestNewLaunchReplacesExistingSessionForSameConnection(t *testing.T) {
+	fc := &fakeController{manifest: api.Manifest{ConnectionID: 7, Protocol: "mock", Host: "mock", Port: 1, Config: json.RawMessage(`{}`)}}
+	runner := &concurrentRunner{started: make(chan struct{}, 2), release: make(chan struct{})}
+	m := NewManager(fc, runner, true, time.Second, Clients{})
+	first, err := m.Launch("first")
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-runner.started
+	second, err := m.Launch("replacement")
+	if err != nil {
+		t.Fatal(err)
+	}
+	<-runner.started
+	deadline := time.Now().Add(time.Second)
+	for len(m.Status().Sessions) != 1 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	sessions := m.Status().Sessions
+	if len(sessions) != 1 || sessions[0].ID != second {
+		t.Fatalf("replacement did not remove stale session %q: %#v", first, sessions)
+	}
+	close(runner.release)
 }
 func TestRedeemFailureDoesNotRun(t *testing.T) {
 	fc := &fakeController{err: errors.New("invalid ticket")}
