@@ -23,7 +23,7 @@ esac
 PULSE_CONFIG=/usr/local/libexec/thinpi-pulse.pa
 if ! pulseaudio --check >/dev/null 2>&1; then
   case "$ACTION" in
-    prepare) pulseaudio --start --file="$PULSE_CONFIG" --exit-idle-time=-1 ;;
+    prepare) pulseaudio -n --start --file="$PULSE_CONFIG" --exit-idle-time=-1 ;;
     suspend) exit 0 ;;
     resume) echo "PulseAudio is not running" >&2; exit 1 ;;
   esac

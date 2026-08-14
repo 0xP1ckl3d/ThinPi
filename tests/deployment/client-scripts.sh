@@ -15,6 +15,7 @@ $ROOT/deploy/client/stage.sh
 $ROOT/deploy/client/update.sh
 $ROOT/deploy/client/maintenance-session.sh
 $ROOT/deploy/client/xinitrc
+$ROOT/deploy/client/prepare-pi-audio.sh
 $ROOT/deploy/client/detect-pi-display.sh
 $ROOT/deploy/pi/provision.sh
 $ROOT/deploy/pi/update.sh
@@ -38,6 +39,9 @@ grep -F 'certutil -A' "$ROOT/deploy/client/browser-policy.sh" >/dev/null
 grep -F 'CA_IMPORT_FILE=$(mktemp)' "$ROOT/deploy/client/browser-policy.sh" >/dev/null
 grep -F "CONTROLLER_URL=\$(sudo sed" "$ROOT/deploy/client/stage.sh" >/dev/null
 grep -F 'xhost +SI:localuser:thinpi' "$ROOT/deploy/client/xinitrc" >/dev/null
+grep -F 'pulseaudio -n --start --file=/usr/local/libexec/thinpi-pulse.pa' "$ROOT/deploy/client/xinitrc" >/dev/null
+grep -F 'pulseaudio -n --start --file="$PULSE_CONFIG"' "$ROOT/deploy/client/prepare-pi-audio.sh" >/dev/null
+grep -F 'pulseaudio --kill' "$ROOT/deploy/client/stage.sh" >/dev/null
 grep -F 'TTYPath=/dev/tty2' "$ROOT/deploy/client/thinpi-maintenance@.service" >/dev/null
 grep -F 'pipewire-audio pipewire-alsa pipewire-pulse' "$ROOT/deploy/client/provision.sh" >/dev/null
 grep -F 'bash /tmp/moonlight-repo.sh' "$ROOT/deploy/client/provision.sh" >/dev/null

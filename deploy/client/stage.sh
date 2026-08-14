@@ -51,6 +51,11 @@ if systemctl list-unit-files thinpi-agent.service --no-legend 2>/dev/null | grep
     sudo rm -f /etc/systemd/system/thinpi-ui.service.d/raspberry-pi.conf
     sudo rmdir /etc/systemd/system/thinpi-ui.service.d 2>/dev/null || true
     sudo /usr/local/libexec/thinpi-detect-display
+    # PulseAudio daemonizes outside the UI service cgroup. Stop the existing
+    # kiosk instance so a redeploy always applies the installed startup script.
+    sudo -u thinpi env XDG_RUNTIME_DIR=/run/thinpi-session \
+      PULSE_SERVER=unix:/run/thinpi-session/pulse/native \
+      pulseaudio --kill >/dev/null 2>&1 || true
   fi
   sudo systemctl daemon-reload
   sudo systemctl set-default thinpi.target
