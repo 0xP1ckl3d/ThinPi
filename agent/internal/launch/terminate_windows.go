@@ -4,11 +4,13 @@ package launch
 
 import "os"
 
-func terminateProcessGroup(pid int) {
+func terminateProcessGroup(pid int) error {
 	if pid <= 0 {
-		return
+		return os.ErrInvalid
 	}
-	if process, err := os.FindProcess(pid); err == nil {
-		_ = process.Kill()
+	process, err := os.FindProcess(pid)
+	if err != nil {
+		return err
 	}
+	return process.Kill()
 }

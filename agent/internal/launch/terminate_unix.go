@@ -2,13 +2,17 @@
 
 package launch
 
-import "syscall"
+import (
+	"errors"
+	"syscall"
+)
 
-func terminateProcessGroup(pid int) {
+func terminateProcessGroup(pid int) error {
 	if pid <= 0 {
-		return
+		return errors.New("client process has not started")
 	}
 	if err := syscall.Kill(-pid, syscall.SIGKILL); err != nil {
-		_ = syscall.Kill(pid, syscall.SIGKILL)
+		return syscall.Kill(pid, syscall.SIGKILL)
 	}
+	return nil
 }

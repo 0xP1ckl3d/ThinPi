@@ -1,6 +1,9 @@
 #!/bin/sh
 # shellcheck disable=SC3045
 ulimit -c 0
+if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] && [ "${1:-}" != "--session-bus" ] && command -v dbus-run-session >/dev/null 2>&1; then
+  exec dbus-run-session -- "$0" --session-bus
+fi
 xhost +SI:localuser:thinpi >/dev/null 2>&1 || true
 xhost - >/dev/null 2>&1 || true
 xset s off
@@ -15,9 +18,6 @@ if grep -aq 'Raspberry Pi' /proc/device-tree/model 2>/dev/null; then
       pulseaudio -n --start --file=/usr/local/libexec/thinpi-pulse.pa --exit-idle-time=-1 >/dev/null 2>&1 || true
   fi
 else
-  if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] && [ "${1:-}" != "--session-bus" ] && command -v dbus-run-session >/dev/null 2>&1; then
-    exec dbus-run-session -- "$0" --session-bus
-  fi
   if command -v systemctl >/dev/null 2>&1 && [ -n "${XDG_RUNTIME_DIR:-}" ]; then
     systemctl --user start pipewire.socket pipewire-pulse.socket wireplumber.service >/dev/null 2>&1 || true
   fi

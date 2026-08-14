@@ -41,6 +41,9 @@ grep -F "CONTROLLER_URL=\$(sudo sed" "$ROOT/deploy/client/stage.sh" >/dev/null
 grep -F 'xhost +SI:localuser:thinpi' "$ROOT/deploy/client/xinitrc" >/dev/null
 grep -F 'pulseaudio -n --start --file=/usr/local/libexec/thinpi-pulse.pa' "$ROOT/deploy/client/xinitrc" >/dev/null
 grep -F 'pulseaudio -n --start --file="$PULSE_CONFIG"' "$ROOT/deploy/client/prepare-pi-audio.sh" >/dev/null
+grep -F 'exec dbus-run-session -- "$0" --session-bus' "$ROOT/deploy/client/xinitrc" >/dev/null
+grep -F 'pactl move-sink-input "$INPUT" thinpi_parking' "$ROOT/deploy/client/prepare-pi-audio.sh" >/dev/null
+grep -F 'pactl unload-module "$MODULE_INDEX"' "$ROOT/deploy/client/prepare-pi-audio.sh" >/dev/null
 grep -F 'pulseaudio --kill' "$ROOT/deploy/client/stage.sh" >/dev/null
 grep -F 'TTYPath=/dev/tty2' "$ROOT/deploy/client/thinpi-maintenance@.service" >/dev/null
 grep -F 'pipewire-audio pipewire-alsa pipewire-pulse' "$ROOT/deploy/client/provision.sh" >/dev/null

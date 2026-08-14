@@ -111,7 +111,7 @@ type WindowController interface {
 }
 
 type AudioController interface {
-	SetAudioSuspended(string, bool) error
+	SetAudioSuspended(string, bool, int) error
 }
 
 type ClientRuntimeError struct {
@@ -301,15 +301,17 @@ func (m *Manager) setSession(id string, state State, err error) {
 func (m *Manager) removeSession(id string) {
 	m.mu.Lock()
 	sink := ""
+	pid := 0
 	if session := m.sessions[id]; session != nil {
 		sink = session.audioSink
+		pid = session.pid
 	}
 	delete(m.sessions, id)
 	shouldSuspend := sink != "" && !m.audioSinkInUseLocked(sink)
 	audio := m.audio
 	m.mu.Unlock()
 	if shouldSuspend && audio != nil {
-		if err := audio.SetAudioSuspended(sink, true); err != nil {
+		if err := audio.SetAudioSuspended(sink, true, pid); err != nil {
 			m.log.Warn("could not release session audio output", "sink", sink, "error", err)
 		}
 	}
@@ -324,7 +326,7 @@ func (m *Manager) audioSinkInUseLocked(sink string) bool {
 	return false
 }
 
-func (m *Manager) releaseAudioIfUnused(sink string) {
+func (m *Manager) releaseAudioIfUnused(sink string, pid int) {
 	if sink == "" || m.audio == nil {
 		return
 	}
@@ -332,7 +334,7 @@ func (m *Manager) releaseAudioIfUnused(sink string) {
 	inUse := m.audioSinkInUseLocked(sink)
 	m.mu.Unlock()
 	if !inUse {
-		if err := m.audio.SetAudioSuspended(sink, true); err != nil {
+		if err := m.audio.SetAudioSuspended(sink, true, pid); err != nil {
 			m.log.Warn("could not release session audio output", "sink", sink, "error", err)
 		}
 	}
@@ -607,11 +609,11 @@ func (m *Manager) Cancel(id string) error {
 		}
 		sinks := make(map[string]struct{})
 		removeNow := make([]string, 0)
+		stopNow := make([]string, 0)
 		for sessionID, session := range m.sessions {
 			terminal := session.status.State == Failed || session.pendingSSH != nil
 			session.status.State = Stopping
 			session.cancel()
-			terminateProcessGroup(session.pid)
 			if session.audioSink != "" {
 				sinks[session.audioSink] = struct{}{}
 			}
@@ -619,15 +621,17 @@ func (m *Manager) Cancel(id string) error {
 				removeNow = append(removeNow, sessionID)
 				continue
 			}
-			forcedID := sessionID
-			time.AfterFunc(2*time.Second, func() { m.removeSession(forcedID) })
+			stopNow = append(stopNow, sessionID)
 		}
 		m.mu.Unlock()
 		for _, sessionID := range removeNow {
 			m.removeSession(sessionID)
 		}
+		for _, sessionID := range stopNow {
+			m.ensureSessionStopped(sessionID, 4)
+		}
 		for sink := range sinks {
-			m.releaseAudioIfUnused(sink)
+			m.releaseAudioIfUnused(sink, 0)
 		}
 		return nil
 	}
@@ -638,17 +642,36 @@ func (m *Manager) Cancel(id string) error {
 	}
 	terminal := session.status.State == Failed || session.pendingSSH != nil
 	sink := session.audioSink
+	pid := session.pid
 	session.status.State = Stopping
 	session.cancel()
-	terminateProcessGroup(session.pid)
 	m.mu.Unlock()
 	if terminal {
 		m.removeSession(id)
 	} else {
-		time.AfterFunc(2*time.Second, func() { m.removeSession(id) })
+		m.ensureSessionStopped(id, 4)
 	}
-	m.releaseAudioIfUnused(sink)
+	m.releaseAudioIfUnused(sink, pid)
 	return nil
+}
+
+func (m *Manager) ensureSessionStopped(id string, attempts int) {
+	m.mu.Lock()
+	session := m.sessions[id]
+	if session == nil || session.status.State != Stopping {
+		m.mu.Unlock()
+		return
+	}
+	pid := session.pid
+	m.mu.Unlock()
+	if err := terminateProcessGroup(pid); err != nil {
+		m.log.Warn("could not terminate native client process", "session_id", id, "pid", pid, "error", err)
+	} else {
+		m.log.Info("native client termination requested", "session_id", id, "pid", pid)
+	}
+	if attempts > 1 {
+		time.AfterFunc(250*time.Millisecond, func() { m.ensureSessionStopped(id, attempts-1) })
+	}
 }
 
 func (m *Manager) Minimize(id string) error {
@@ -684,7 +707,7 @@ func (m *Manager) Minimize(id string) error {
 	audio := m.audio
 	m.mu.Unlock()
 	if shouldSuspend && audio != nil {
-		if err := audio.SetAudioSuspended(sink, true); err != nil {
+		if err := audio.SetAudioSuspended(sink, true, pid); err != nil {
 			m.log.Warn("could not release minimized session audio output", "sink", sink, "error", err)
 		}
 	}
@@ -698,16 +721,16 @@ func (m *Manager) Resume(id string) error {
 		m.mu.Unlock()
 		return errors.New("no minimized session")
 	}
-	windows, windowState, mock, sink, audio := m.windows, session.windowState, m.mock, session.audioSink, m.audio
+	windows, windowState, mock, sink, audio, pid := m.windows, session.windowState, m.mock, session.audioSink, m.audio, session.pid
 	m.mu.Unlock()
 	if sink != "" && audio != nil {
-		if err := audio.SetAudioSuspended(sink, false); err != nil {
+		if err := audio.SetAudioSuspended(sink, false, pid); err != nil {
 			m.log.Warn("could not restore session audio output", "sink", sink, "error", err)
 		}
 	}
 	if !mock {
 		if err := windows.Resume(windowState); err != nil {
-			m.releaseAudioIfUnused(sink)
+			m.releaseAudioIfUnused(sink, pid)
 			return err
 		}
 	}
@@ -715,7 +738,7 @@ func (m *Manager) Resume(id string) error {
 	session = m.sessions[id]
 	if session == nil || session.status.State != Active {
 		m.mu.Unlock()
-		m.releaseAudioIfUnused(sink)
+		m.releaseAudioIfUnused(sink, 0)
 		return errors.New("session ended while it was being restored")
 	}
 	session.status.Minimized = false

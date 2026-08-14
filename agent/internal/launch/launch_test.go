@@ -454,7 +454,7 @@ type fakeAudioRunner struct {
 }
 
 func (f *fakeAudioRunner) Run(context.Context, Command) error { return nil }
-func (f *fakeAudioRunner) SetAudioSuspended(sink string, suspended bool) error {
+func (f *fakeAudioRunner) SetAudioSuspended(sink string, suspended bool, _ int) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	action := "resume:"

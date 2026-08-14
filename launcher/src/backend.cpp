@@ -811,15 +811,10 @@ void Backend::pollAgent() {
   });
 }
 void Backend::endSession() {
-  const auto remoteWindow = m_toolbarReturnWindow;
   endToolbarInteraction();
   const auto session = m_sessions.constFind(m_activeConnectionID);
   if (session == m_sessions.constEnd() || session->id.isEmpty())
     return;
-  const auto xdotool = QStandardPaths::findExecutable("xdotool");
-  if (!xdotool.isEmpty() && !remoteWindow.isEmpty())
-    QProcess::startDetached(xdotool,
-                            {QStringLiteral("windowclose"), remoteWindow});
   agentRequest({{"action", "cancel"}, {"session_id", session->id}},
                [this](QJsonObject response) {
                  if (!response["accepted"].toBool()) {

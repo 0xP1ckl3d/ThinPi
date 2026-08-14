@@ -308,15 +308,21 @@ func nativePiAudioHelper() string {
 	return helper
 }
 
-func (PlatformRunner) SetAudioSuspended(sink string, suspended bool) error {
-	action := "resume"
-	if suspended {
-		action = "suspend"
+func (PlatformRunner) SetAudioSuspended(sink string, suspended bool, pid int) error {
+	action := "release"
+	args := []string{action, sink}
+	if !suspended {
+		action = "resume"
+		device := nativeALSAAudioDevice()
+		if device == "" {
+			return errors.New("no audio playback device is available")
+		}
+		args = []string{action, device, sink, strconv.Itoa(pid)}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	credential, sessionHome := nativeSessionIdentity()
-	cmd := exec.CommandContext(ctx, nativePiAudioHelper(), action, sink)
+	cmd := exec.CommandContext(ctx, nativePiAudioHelper(), args...)
 	configureNativeCommand(cmd, credential, sessionHome, nil)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
