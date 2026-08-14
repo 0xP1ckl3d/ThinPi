@@ -14,7 +14,6 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
-	"time"
 )
 
 type PlatformRunner struct{}
@@ -170,7 +169,7 @@ func configureNativeCommand(cmd *exec.Cmd, credential *syscall.Credential, sessi
 		"PULSE_SERVER=unix:"+runtimeDir+"/pulse/native",
 		"SDL_AUDIODRIVER="+audioDriver, "SDL_AUDIO_DRIVER="+audioDriver)
 	if audioDriver == "alsa" && strings.Contains(strings.ToLower(filepath.Base(cmd.Path)), "moonlight") {
-		if device := nativeALSAAudioDevice(credential, runtimeDir, sessionHome); device != "" {
+		if device := nativeALSAAudioDevice(); device != "" {
 			// Moonlight 6.1 on Raspberry Pi uses SDL2, which reads AUDIODEV.
 			// Set the SDL3 names too so a package upgrade keeps using the
 			// discovered system playback device rather than an arbitrary card.
@@ -197,7 +196,7 @@ func nativeAudioDriver() string {
 	return "pulseaudio"
 }
 
-func nativeALSAAudioDevice(credential *syscall.Credential, runtimeDir, sessionHome string) string {
+func nativeALSAAudioDevice() string {
 	if configured := strings.TrimSpace(os.Getenv("THINPI_ALSA_DEVICE")); configured != "" {
 		return configured
 	}
@@ -213,45 +212,10 @@ func nativeALSAAudioDevice(credential *syscall.Credential, runtimeDir, sessionHo
 	if drmRoot == "" {
 		drmRoot = "/sys/class/drm"
 	}
-	physical := piALSAAudioCandidates(asoundRoot, drmRoot)
-	// Prefer concrete hardware that is present now. ALSA's implicit "default"
-	// can resolve to a disconnected HDMI card or a sound server that is not
-	// running in the kiosk session, while still passing a configuration-only
-	// open check.
-	candidates := append(append([]string{}, physical...), "default")
-	for _, candidate := range candidates {
-		if alsaPlaybackAvailable(candidate, credential, runtimeDir, sessionHome) {
-			return candidate
-		}
-	}
-	// Provisioning installs aplay, but retain a deterministic physical fallback
-	// if it is temporarily unavailable while packages are being upgraded.
-	if len(physical) > 0 {
-		return physical[0]
-	}
-	return ""
-}
-
-func alsaPlaybackAvailable(device string, credential *syscall.Credential, runtimeDir, sessionHome string) bool {
-	aplay, err := exec.LookPath("aplay")
-	if err != nil {
-		return false
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
-	defer cancel()
-	probe := exec.CommandContext(ctx, aplay, "-q", "-D", device, "-t", "raw",
-		"-f", "S16_LE", "-c", "2", "-r", "48000", "-")
-	// An empty input can exit before ALSA proves it can write to the device.
-	// Send 25 ms of silence so disconnected or unusable outputs are rejected
-	// without producing audible sound.
-	probe.Stdin = bytes.NewReader(make([]byte, 4800))
-	if credential != nil {
-		probe.SysProcAttr = &syscall.SysProcAttr{Credential: credential}
-	}
-	probe.Env = append(os.Environ(), "HOME="+sessionHome,
-		"XDG_RUNTIME_DIR="+runtimeDir,
-		"PULSE_SERVER=unix:"+runtimeDir+"/pulse/native")
-	return probe.Run() == nil
+	// Do not open the device to validate it here. HDMI ALSA playback is
+	// exclusive and a pre-launch probe can still own the device when Moonlight
+	// starts, intermittently making Moonlight's audio initialization fail.
+	return piALSAAudioDevice(asoundRoot, drmRoot)
 }
 
 func clientExitedNormally(output string) bool {

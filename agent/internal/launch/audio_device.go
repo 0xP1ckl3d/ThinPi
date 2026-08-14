@@ -16,7 +16,6 @@ var (
 // piALSAAudioCandidates returns physical playback devices in preference order:
 // non-HDMI devices that are actually present (USB speakers, DACs, analogue
 // outputs), the connected HDMI port, then any remaining HDMI playback device.
-// The configured ALSA "default" device is tried separately after this list.
 func piALSAAudioCandidates(asoundRoot, drmRoot string) []string {
 	cards, _ := os.ReadFile(filepath.Join(asoundRoot, "cards"))
 	pcms, _ := os.ReadFile(filepath.Join(asoundRoot, "pcm"))
@@ -38,7 +37,10 @@ func piALSAAudioCandidates(asoundRoot, drmRoot string) []string {
 		if cardErr != nil || deviceErr != nil || cardID == "" {
 			continue
 		}
-		device := "plughw:CARD=" + cardID + ",DEV=" + strconv.Itoa(deviceNumber)
+		// Moonlight sessions may coexist while minimized. Route every session
+		// through ALSA's per-user software mixer instead of opening the
+		// physical PCM exclusively with hw/plughw.
+		device := "dmix:CARD=" + cardID + ",DEV=" + strconv.Itoa(deviceNumber)
 		if seen[device] {
 			continue
 		}
@@ -52,6 +54,13 @@ func piALSAAudioCandidates(asoundRoot, drmRoot string) []string {
 		}
 	}
 	return append(append(physical, connected...), remaining...)
+}
+
+func piALSAAudioDevice(asoundRoot, drmRoot string) string {
+	if candidates := piALSAAudioCandidates(asoundRoot, drmRoot); len(candidates) > 0 {
+		return candidates[0]
+	}
+	return "default"
 }
 
 func piConnectedHDMICard(drmRoot string) string {
