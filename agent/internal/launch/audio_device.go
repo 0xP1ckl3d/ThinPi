@@ -37,10 +37,10 @@ func piALSAAudioCandidates(asoundRoot, drmRoot string) []string {
 		if cardErr != nil || deviceErr != nil || cardID == "" {
 			continue
 		}
-		// Moonlight sessions may coexist while minimized. Route every session
-		// through ALSA's per-user software mixer instead of opening the
-		// physical PCM exclusively with hw/plughw.
-		device := "dmix:CARD=" + cardID + ",DEV=" + strconv.Itoa(deviceNumber)
+		// PulseAudio opens this conversion-capable PCM once and mixes all
+		// Moonlight sessions above it. This also handles HDMI devices whose
+		// native format is IEC958 rather than signed PCM.
+		device := "plughw:CARD=" + cardID + ",DEV=" + strconv.Itoa(deviceNumber)
 		if seen[device] {
 			continue
 		}
@@ -60,7 +60,7 @@ func piALSAAudioDevice(asoundRoot, drmRoot string) string {
 	if candidates := piALSAAudioCandidates(asoundRoot, drmRoot); len(candidates) > 0 {
 		return candidates[0]
 	}
-	return "default"
+	return ""
 }
 
 func piConnectedHDMICard(drmRoot string) string {

@@ -256,6 +256,8 @@ if [ "$PLATFORM" = raspberry-pi ]; then
   [ -x /usr/lib/xorg/Xorg.wrap ] || { echo "xserver-xorg-legacy did not install /usr/lib/xorg/Xorg.wrap" >&2; exit 1; }
   sed -i 's/^needs_root_rights=auto$/needs_root_rights=yes/' /etc/X11/Xwrapper.config
   install -m 0755 "$SCRIPT_DIR/detect-pi-display.sh" /usr/local/libexec/thinpi-detect-display
+  install -m 0755 "$SCRIPT_DIR/prepare-pi-audio.sh" /usr/local/libexec/thinpi-prepare-pi-audio
+  install -m 0644 "$SCRIPT_DIR/pulse-pi.pa" /usr/local/libexec/thinpi-pulse.pa
   rm -f /usr/local/libexec/thinpi-configure-pi-xorg
   rm -f /etc/systemd/system/thinpi-ui.service.d/raspberry-pi.conf
   rmdir /etc/systemd/system/thinpi-ui.service.d 2>/dev/null || true

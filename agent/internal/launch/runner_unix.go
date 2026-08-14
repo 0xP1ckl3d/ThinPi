@@ -5,7 +5,9 @@ package launch
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -43,6 +45,9 @@ func (PlatformRunner) Run(ctx context.Context, c Command) error {
 		configureNativeCommand(cmd, credential, sessionHome, c.Env)
 	}
 	if err := ensureMoonlightPaired(ctx, c, configure); err != nil {
+		return err
+	}
+	if err := prepareMoonlightAudio(ctx, c, configure); err != nil {
 		return err
 	}
 	args := append([]string(nil), c.Args...)
@@ -161,7 +166,7 @@ func configureNativeCommand(cmd *exec.Cmd, credential *syscall.Credential, sessi
 		}
 		return syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 	}
-	runtimeDir := "/run/user/" + strconv.FormatUint(uint64(credential.Uid), 10)
+	runtimeDir := nativeRuntimeDir(credential)
 	audioDriver := nativeAudioDriver()
 	cmd.Env = append(os.Environ(), "HOME="+sessionHome, "USER=thinpi", "LOGNAME=thinpi",
 		"THINPI_SESSION_HOME="+sessionHome, "XDG_RUNTIME_DIR="+runtimeDir,
@@ -189,19 +194,67 @@ func nativeAudioDriver() string {
 	if configured := strings.ToLower(strings.TrimSpace(os.Getenv("THINPI_AUDIO_DRIVER"))); configured == "alsa" || configured == "pulseaudio" {
 		return configured
 	}
-	model, _ := os.ReadFile("/proc/device-tree/model")
-	if bytes.Contains(model, []byte("Raspberry Pi")) {
-		return "alsa"
-	}
 	return "pulseaudio"
+}
+
+func nativeRuntimeDir(credential *syscall.Credential) string {
+	if configured := strings.TrimSpace(os.Getenv("THINPI_SESSION_RUNTIME_DIR")); configured != "" {
+		return configured
+	}
+	const piRuntimeDir = "/run/thinpi-session"
+	if info, err := os.Stat(piRuntimeDir); err == nil && info.IsDir() {
+		return piRuntimeDir
+	}
+	return "/run/user/" + strconv.FormatUint(uint64(credential.Uid), 10)
+}
+
+func prepareMoonlightAudio(ctx context.Context, command Command, configure func(*exec.Cmd)) error {
+	if command.MoonlightPairing == nil || !nativeRaspberryPi() || nativeAudioDriver() != "pulseaudio" {
+		return nil
+	}
+	device := nativeALSAAudioDevice()
+	if device == "" {
+		return &ClientRuntimeError{
+			Message:    "ThinPi could not find a connected audio playback device.",
+			Diagnostic: "No ALSA playback PCM was discovered for the Raspberry Pi kiosk session.",
+		}
+	}
+	helper := strings.TrimSpace(os.Getenv("THINPI_PI_AUDIO_HELPER"))
+	if helper == "" {
+		helper = "/usr/local/libexec/thinpi-prepare-pi-audio"
+	}
+	digest := sha256.Sum256([]byte(device))
+	sinkName := fmt.Sprintf("thinpi_%x", digest[:8])
+	prepare := exec.CommandContext(ctx, helper, device, sinkName)
+	configure(prepare)
+	output, err := prepare.CombinedOutput()
+	if err != nil {
+		diagnostic := strings.TrimSpace(string(output))
+		if diagnostic == "" {
+			diagnostic = err.Error()
+		}
+		slog.Error("Moonlight audio output preparation failed", "device", device,
+			"error", diagnostic)
+		return &ClientRuntimeError{
+			Message:    "ThinPi could not prepare the selected audio output.",
+			Diagnostic: diagnostic,
+		}
+	}
+	slog.Info("Moonlight audio output prepared", "driver", "pulseaudio",
+		"device", device, "sink", sinkName)
+	return nil
+}
+
+func nativeRaspberryPi() bool {
+	model, _ := os.ReadFile("/proc/device-tree/model")
+	return bytes.Contains(model, []byte("Raspberry Pi"))
 }
 
 func nativeALSAAudioDevice() string {
 	if configured := strings.TrimSpace(os.Getenv("THINPI_ALSA_DEVICE")); configured != "" {
 		return configured
 	}
-	model, _ := os.ReadFile("/proc/device-tree/model")
-	if !bytes.Contains(model, []byte("Raspberry Pi")) {
+	if !nativeRaspberryPi() {
 		return ""
 	}
 	asoundRoot := os.Getenv("THINPI_ASOUND_ROOT")

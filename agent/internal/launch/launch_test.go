@@ -112,7 +112,7 @@ func TestPiALSAAudioCandidatesPreferPhysicalThenConnectedHDMI(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(asoundRoot, "pcm"), []byte(pcms), 0644); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"dmix:CARD=USB,DEV=0", "dmix:CARD=vc4hdmi1,DEV=0", "dmix:CARD=vc4hdmi0,DEV=0"}
+	want := []string{"plughw:CARD=USB,DEV=0", "plughw:CARD=vc4hdmi1,DEV=0", "plughw:CARD=vc4hdmi0,DEV=0"}
 	if got := piALSAAudioCandidates(asoundRoot, drmRoot); !slices.Equal(got, want) {
 		t.Fatalf("unexpected ALSA device order: got %#v want %#v", got, want)
 	}
@@ -121,9 +121,9 @@ func TestPiALSAAudioCandidatesPreferPhysicalThenConnectedHDMI(t *testing.T) {
 	}
 }
 
-func TestPiALSAAudioDeviceFallsBackWithoutOpeningDevice(t *testing.T) {
-	if got := piALSAAudioDevice(t.TempDir(), t.TempDir()); got != "default" {
-		t.Fatalf("unexpected ALSA fallback: got %q want default", got)
+func TestPiALSAAudioDeviceRejectsMissingPlaybackHardware(t *testing.T) {
+	if got := piALSAAudioDevice(t.TempDir(), t.TempDir()); got != "" {
+		t.Fatalf("unexpected ALSA fallback: got %q want empty", got)
 	}
 }
 

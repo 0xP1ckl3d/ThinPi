@@ -6,9 +6,15 @@ xhost - >/dev/null 2>&1 || true
 xset s off
 xset s noblank
 
-# Raspberry Pi OS uses direct ALSA for Moonlight because PulseAudio can reject
-# the KMS HDMI card profile. Lubuntu retains its PipeWire/Pulse user services.
-if ! grep -aq 'Raspberry Pi' /proc/device-tree/model 2>/dev/null; then
+# Raspberry Pi OS uses a minimal PulseAudio server. The agent loads a sink for
+# the currently selected physical ALSA device, bypassing unreliable KMS HDMI
+# profile detection while retaining format conversion and multi-client mixing.
+if grep -aq 'Raspberry Pi' /proc/device-tree/model 2>/dev/null; then
+  if command -v pulseaudio >/dev/null 2>&1; then
+    pulseaudio --check >/dev/null 2>&1 || \
+      pulseaudio --start --file=/usr/local/libexec/thinpi-pulse.pa --exit-idle-time=-1 >/dev/null 2>&1 || true
+  fi
+else
   if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ] && [ "${1:-}" != "--session-bus" ] && command -v dbus-run-session >/dev/null 2>&1; then
     exec dbus-run-session -- "$0" --session-bus
   fi

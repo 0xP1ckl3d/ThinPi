@@ -45,6 +45,8 @@ if systemctl list-unit-files thinpi-agent.service --no-legend 2>/dev/null | grep
     }
     sudo sed -i 's/^needs_root_rights=auto$/needs_root_rights=yes/' /etc/X11/Xwrapper.config
     sudo install -m 0755 /tmp/thinpi/deploy-client/detect-pi-display.sh /usr/local/libexec/thinpi-detect-display
+    sudo install -m 0755 /tmp/thinpi/deploy-client/prepare-pi-audio.sh /usr/local/libexec/thinpi-prepare-pi-audio
+    sudo install -m 0644 /tmp/thinpi/deploy-client/pulse-pi.pa /usr/local/libexec/thinpi-pulse.pa
     sudo rm -f /usr/local/libexec/thinpi-configure-pi-xorg
     sudo rm -f /etc/systemd/system/thinpi-ui.service.d/raspberry-pi.conf
     sudo rmdir /etc/systemd/system/thinpi-ui.service.d 2>/dev/null || true

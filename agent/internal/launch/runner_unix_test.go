@@ -33,7 +33,7 @@ func TestUserInitiatedRDPLogoffIsSuccessful(t *testing.T) {
 
 func TestNativeClientCancellationTargetsProcessGroup(t *testing.T) {
 	t.Setenv("THINPI_AUDIO_DRIVER", "alsa")
-	t.Setenv("THINPI_ALSA_DEVICE", "dmix:CARD=vc4hdmi0,DEV=0")
+	t.Setenv("THINPI_ALSA_DEVICE", "plughw:CARD=vc4hdmi0,DEV=0")
 	command := exec.Command("moonlight-qt")
 	configureNativeCommand(command, &syscall.Credential{Uid: 1, Gid: 1}, "/home/thinpi", nil)
 	if command.SysProcAttr == nil || !command.SysProcAttr.Setpgid {
@@ -43,7 +43,7 @@ func TestNativeClientCancellationTargetsProcessGroup(t *testing.T) {
 		t.Fatal("native client cancellation does not terminate its process group")
 	}
 	environment := strings.Join(command.Env, "\n")
-	for _, want := range []string{"XDG_RUNTIME_DIR=/run/user/1", "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1/bus", "PULSE_SERVER=unix:/run/user/1/pulse/native", "SDL_AUDIODRIVER=alsa", "SDL_AUDIO_DRIVER=alsa", "AUDIODEV=dmix:CARD=vc4hdmi0,DEV=0", "SDL_AUDIO_ALSA_DEFAULT_PLAYBACK_DEVICE=dmix:CARD=vc4hdmi0,DEV=0"} {
+	for _, want := range []string{"XDG_RUNTIME_DIR=/run/user/1", "DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1/bus", "PULSE_SERVER=unix:/run/user/1/pulse/native", "SDL_AUDIODRIVER=alsa", "SDL_AUDIO_DRIVER=alsa", "AUDIODEV=plughw:CARD=vc4hdmi0,DEV=0", "SDL_AUDIO_ALSA_DEFAULT_PLAYBACK_DEVICE=plughw:CARD=vc4hdmi0,DEV=0"} {
 		if !strings.Contains(environment, want) {
 			t.Fatalf("native client environment is missing %q: %s", want, environment)
 		}
