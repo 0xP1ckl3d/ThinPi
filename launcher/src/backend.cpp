@@ -86,7 +86,8 @@ void Backend::setSessionMinimized(bool minimized) {
 }
 bool Backend::currentSessionVisible() const {
   const auto session = m_sessions.constFind(m_activeConnectionID);
-  return session != m_sessions.constEnd() && session->state == "active" &&
+  return session != m_sessions.constEnd() &&
+         (session->state == "active" || session->state == "stopping") &&
          !session->minimized;
 }
 QString Backend::connectionSessionState(qint64 connectionID) const {
